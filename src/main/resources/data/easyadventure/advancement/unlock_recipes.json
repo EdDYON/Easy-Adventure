@@ -1,0 +1,21 @@
+{
+  "criteria": {
+    "has_paper": {
+      "trigger": "minecraft:inventory_changed",
+      "conditions": {
+        "items": [
+          { "items": "minecraft:paper" }
+        ]
+      }
+    }
+  },
+  "rewards": {
+    "recipes": [
+      "easyadventure:base_key",
+      "easyadventure:base_core"
+    ]
+  },
+  "requirements": [
+    [ "has_paper" ]
+  ]
+}

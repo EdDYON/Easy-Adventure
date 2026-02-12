@@ -1,0 +1,10 @@
+{
+  "block.easyadventure.base_core": "基地核心",
+  "item.easyadventure.base_key": "空间收纳卷轴",
+  "itemGroup.easyadventure": "easy adventure",
+  "tooltip.easyadventure.key_empty": "§7[空置]",
+  "tooltip.easyadventure.key_contains": "§a[已存储数据]",
+  "message.easyadventure.key_mismatch": "§c钥匙不匹配！",
+  "message.easyadventure.core_locked": "§c基地已锁定/收纳，无法修改大小！",
+  "gui.easyadventure.core_size_title": "设置基地大小"
+}
