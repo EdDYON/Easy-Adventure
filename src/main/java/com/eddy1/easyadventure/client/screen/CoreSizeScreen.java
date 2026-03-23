@@ -1,6 +1,7 @@
 package com.eddy1.easyadventure.client.screen;
 
 import com.eddy1.easyadventure.block.BaseCoreBlockEntity;
+import com.eddy1.easyadventure.block.core.CorePasswordUtil;
 import com.eddy1.easyadventure.menu.CoreSizeMenu;
 import com.eddy1.easyadventure.network.UpdateCoreSizePayload;
 import net.minecraft.client.gui.GuiGraphics;
@@ -15,93 +16,134 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
     private EditBox xEdit;
     private EditBox yEdit;
     private EditBox zEdit;
-    private int currentX;
-    private int currentY;
-    private int currentZ;
+    private EditBox passwordEdit;
+    private Button passwordToggleButton;
+    private boolean passwordEnabled;
 
     public CoreSizeScreen(CoreSizeMenu menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title);
-        this.imageWidth = 176;
-        this.imageHeight = 186;
+        this.imageWidth = 212;
+        this.imageHeight = 236;
     }
 
     @Override
     protected void init() {
         super.init();
-        if (minecraft.level.getBlockEntity(menu.getPos()) instanceof BaseCoreBlockEntity core) {
-            this.currentX = core.getSizeX();
-            this.currentY = core.getSizeY();
-            this.currentZ = core.getSizeZ();
-        } else {
-            this.currentX = 9;
-            this.currentY = 5;
-            this.currentZ = 9;
+
+        int sizeX = 9;
+        int sizeY = 5;
+        int sizeZ = 9;
+        if (minecraft != null && minecraft.level != null && minecraft.level.getBlockEntity(menu.getPos()) instanceof BaseCoreBlockEntity core) {
+            sizeX = core.getSizeX();
+            sizeY = core.getSizeY();
+            sizeZ = core.getSizeZ();
         }
+        passwordEnabled = menu.isPasswordEnabled();
 
-        int startX = (this.width - this.imageWidth) / 2;
-        int startY = (this.height - this.imageHeight) / 2;
+        int left = (this.width - this.imageWidth) / 2;
+        int top = (this.height - this.imageHeight) / 2;
 
-        this.xEdit = new EditBox(this.font, startX + 60, startY + 20, 50, 20, Component.literal("X"));
-        this.xEdit.setValue(String.valueOf(currentX));
-        this.xEdit.setFilter(s -> s.matches("\\d*"));
+        this.xEdit = createNumberBox(left + 132, top + 20, sizeX, !menu.isSizeLocked());
+        this.yEdit = createNumberBox(left + 132, top + 50, sizeY, !menu.isSizeLocked());
+        this.zEdit = createNumberBox(left + 132, top + 80, sizeZ, !menu.isSizeLocked());
+        this.passwordEdit = new EditBox(this.font, left + 16, top + 150, 180, 20, Component.empty());
+        this.passwordEdit.setMaxLength(CorePasswordUtil.MAX_PASSWORD_LENGTH);
+        this.passwordEdit.setHint(Component.translatable("gui.easyadventure.password_hint"));
+        this.passwordEdit.setFilter(input -> input.indexOf('\n') < 0 && input.indexOf('\r') < 0 && input.length() <= CorePasswordUtil.MAX_PASSWORD_LENGTH);
+        this.passwordEdit.setEditable(true);
+
+        this.passwordToggleButton = Button.builder(Component.empty(), button -> togglePassword())
+                .pos(left + 16, top + 118)
+                .size(180, 20)
+                .build();
+        refreshToggleLabel();
+
         this.addRenderableWidget(xEdit);
-
-        this.yEdit = new EditBox(this.font, startX + 60, startY + 50, 50, 20, Component.literal("Y"));
-        this.yEdit.setValue(String.valueOf(currentY));
-        this.yEdit.setFilter(s -> s.matches("\\d*"));
         this.addRenderableWidget(yEdit);
-
-        this.zEdit = new EditBox(this.font, startX + 60, startY + 80, 50, 20, Component.literal("Z"));
-        this.zEdit.setValue(String.valueOf(currentZ));
-        this.zEdit.setFilter(s -> s.matches("\\d*"));
         this.addRenderableWidget(zEdit);
+        this.addRenderableWidget(passwordToggleButton);
+        this.addRenderableWidget(passwordEdit);
+        this.addRenderableWidget(Button.builder(Component.translatable("button.easyadventure.apply"), button -> save())
+                .pos(left + 58, top + 186)
+                .size(96, 20)
+                .build());
+    }
 
-        this.addRenderableWidget(Button.builder(Component.literal("应用设置"), button -> save())
-                .pos(startX + 40, startY + 115).size(96, 20).build());
+    @Override
+    protected void renderLabels(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        guiGraphics.drawCenteredString(this.font, this.title, this.imageWidth / 2, 8, 0xFFFFFF);
+    }
+
+    private EditBox createNumberBox(int x, int y, int value, boolean editable) {
+        EditBox box = new EditBox(this.font, x, y, 52, 20, Component.empty());
+        box.setValue(Integer.toString(value));
+        box.setFilter(input -> input.matches("\\d*"));
+        box.setEditable(editable);
+        box.setTextColor(editable ? 0xFFFFFF : 0x8E8E8E);
+        return box;
+    }
+
+    private void togglePassword() {
+        passwordEnabled = !passwordEnabled;
+        refreshToggleLabel();
+    }
+
+    private void refreshToggleLabel() {
+        passwordToggleButton.setMessage(Component.translatable(
+                passwordEnabled ? "button.easyadventure.password_on" : "button.easyadventure.password_off"
+        ));
     }
 
     private void save() {
-        try {
-            String xVal = xEdit.getValue();
-            String yVal = yEdit.getValue();
-            String zVal = zEdit.getValue();
+        int newX = clamp(parseValue(xEdit, 9), BaseCoreBlockEntity.MIN_SIZE_XZ, BaseCoreBlockEntity.MAX_SIZE_XZ);
+        int newY = clamp(parseValue(yEdit, 5), BaseCoreBlockEntity.MIN_SIZE_Y, BaseCoreBlockEntity.MAX_SIZE_Y);
+        int newZ = clamp(parseValue(zEdit, 9), BaseCoreBlockEntity.MIN_SIZE_XZ, BaseCoreBlockEntity.MAX_SIZE_XZ);
+        PacketDistributor.sendToServer(new UpdateCoreSizePayload(menu.getPos(), newX, newY, newZ, passwordEnabled, passwordEdit.getValue()));
+        onClose();
+    }
 
-            int newX = xVal.isEmpty() ? 9 : Integer.parseInt(xVal);
-            int newY = yVal.isEmpty() ? 5 : Integer.parseInt(yVal);
-            int newZ = zVal.isEmpty() ? 9 : Integer.parseInt(zVal);
-
-            newX = Math.max(3, newX);
-            newZ = Math.max(3, newZ);
-            newY = Math.max(2, newY);
-
-            PacketDistributor.sendToServer(new UpdateCoreSizePayload(menu.getPos(), newX, newY, newZ));
-
-            this.onClose();
-        } catch (NumberFormatException e) {
+    private static int parseValue(EditBox box, int fallback) {
+        String value = box.getValue();
+        if (value.isEmpty()) {
+            return fallback;
         }
+
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException exception) {
+            return fallback;
+        }
+    }
+
+    private static int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        this.renderBackground(guiGraphics, mouseX, mouseY, partialTick);
+        renderBackground(guiGraphics, mouseX, mouseY, partialTick);
         super.render(guiGraphics, mouseX, mouseY, partialTick);
-        this.renderTooltip(guiGraphics, mouseX, mouseY);
+        renderTooltip(guiGraphics, mouseX, mouseY);
 
-        int startX = (this.width - this.imageWidth) / 2;
-        int startY = (this.height - this.imageHeight) / 2;
-
-        guiGraphics.drawString(this.font, "长度 (X):", startX + 10, startY + 26, 0xFFFFFF);
-        guiGraphics.drawString(this.font, "高度 (Y):", startX + 10, startY + 56, 0xFFFFFF);
-        guiGraphics.drawString(this.font, "宽度 (Z):", startX + 10, startY + 86, 0xFFFFFF);
-
-        guiGraphics.drawCenteredString(this.font, "§7建议使用奇数(如5,7)以使核心居中", startX + imageWidth / 2, startY + 145, 0xAAAAAA);
+        int left = (this.width - this.imageWidth) / 2;
+        int top = (this.height - this.imageHeight) / 2;
+        guiGraphics.drawString(this.font, Component.translatable("gui.easyadventure.size_x"), left + 16, top + 26, 0xFFFFFF);
+        guiGraphics.drawString(this.font, Component.translatable("gui.easyadventure.size_y"), left + 16, top + 56, 0xFFFFFF);
+        guiGraphics.drawString(this.font, Component.translatable("gui.easyadventure.size_z"), left + 16, top + 86, 0xFFFFFF);
+        guiGraphics.drawString(this.font, Component.translatable("gui.easyadventure.password_section"), left + 16, top + 124, 0xFFFFFF);
+        guiGraphics.drawString(this.font, Component.translatable("gui.easyadventure.password"), left + 16, top + 140, 0xFFFFFF);
+        guiGraphics.drawCenteredString(this.font, Component.translatable("gui.easyadventure.odd_hint"), left + imageWidth / 2, top + 214, 0xAAAAAA);
+        if (menu.isSizeLocked()) {
+            guiGraphics.drawCenteredString(this.font, Component.translatable("gui.easyadventure.size_locked"), left + imageWidth / 2, top + 104, 0xF2D479);
+        }
+        guiGraphics.drawCenteredString(this.font, Component.translatable("gui.easyadventure.password_help"), left + imageWidth / 2, top + 174, 0xAAAAAA);
     }
 
     @Override
     protected void renderBg(GuiGraphics guiGraphics, float partialTick, int mouseX, int mouseY) {
-        int startX = (this.width - this.imageWidth) / 2;
-        int startY = (this.height - this.imageHeight) / 2;
-        guiGraphics.fill(startX, startY, startX + imageWidth, startY + imageHeight, 0xFF333333);
-        guiGraphics.renderOutline(startX, startY, imageWidth, imageHeight, 0xFFFFFFFF);
+        int left = (this.width - this.imageWidth) / 2;
+        int top = (this.height - this.imageHeight) / 2;
+        guiGraphics.fill(left, top, left + imageWidth, top + imageHeight, 0xFF2B2F3A);
+        guiGraphics.renderOutline(left, top, imageWidth, imageHeight, 0xFFE6D18A);
     }
 }

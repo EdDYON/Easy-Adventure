@@ -2,8 +2,8 @@ plugins {
     id 'net.neoforged.moddev' version '1.0.21'
 }
 
-group = "com.example.examplemod"
-version = "1.0.0"
+group = 'com.eddy1.easyadventure'
+version = '1.5.0'
 
 java {
     toolchain {
@@ -12,7 +12,7 @@ java {
 }
 
 neoForge {
-    version = "21.1.1"
+    version = '21.1.1'
 
     mods {
         easyadventure {
@@ -36,14 +36,13 @@ neoForge {
             server()
             programArgument '--nogui'
         }
-
     }
 }
 
 repositories {
     mavenCentral()
-    maven { url = "https://maven.neoforged.net/releases" }
-    maven { url "https://mirrors.aliyun.com/maven/" }
+    maven { url = 'https://maven.neoforged.net/releases' }
+    maven { url = 'https://mirrors.aliyun.com/maven/' }
 }
 
 dependencies {

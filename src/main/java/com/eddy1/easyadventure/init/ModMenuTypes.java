@@ -2,6 +2,7 @@ package com.eddy1.easyadventure.init;
 
 import com.eddy1.easyadventure.EasyAdventure;
 import com.eddy1.easyadventure.menu.CoreSizeMenu;
+import com.eddy1.easyadventure.menu.KeyPasswordMenu;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.inventory.MenuType;
 import net.neoforged.bus.api.IEventBus;
@@ -15,6 +16,9 @@ public class ModMenuTypes {
 
     public static final DeferredHolder<MenuType<?>, MenuType<CoreSizeMenu>> CORE_SIZE_MENU =
             MENUS.register("core_size_menu", () -> IMenuTypeExtension.create(CoreSizeMenu::new));
+
+    public static final DeferredHolder<MenuType<?>, MenuType<KeyPasswordMenu>> KEY_PASSWORD_MENU =
+            MENUS.register("key_password_menu", () -> IMenuTypeExtension.create(KeyPasswordMenu::new));
 
     public static void register(IEventBus eventBus) {
         MENUS.register(eventBus);

@@ -2,6 +2,7 @@ package com.eddy1.easyadventure.client;
 
 import com.eddy1.easyadventure.EasyAdventure;
 import com.eddy1.easyadventure.client.screen.CoreSizeScreen;
+import com.eddy1.easyadventure.client.screen.KeyPasswordScreen;
 import com.eddy1.easyadventure.init.ModMenuTypes;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -14,5 +15,6 @@ public class ClientModEvents {
     @SubscribeEvent
     public static void registerScreens(RegisterMenuScreensEvent event) {
         event.register(ModMenuTypes.CORE_SIZE_MENU.get(), CoreSizeScreen::new);
+        event.register(ModMenuTypes.KEY_PASSWORD_MENU.get(), KeyPasswordScreen::new);
     }
 }

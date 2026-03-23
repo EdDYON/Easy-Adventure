@@ -1,7 +1,8 @@
 package com.eddy1.easyadventure.block;
 
-import com.eddy1.easyadventure.EasyAdventure;
+import com.eddy1.easyadventure.block.core.CoreAccessControl;
 import com.eddy1.easyadventure.init.ModBlockEntities;
+import com.eddy1.easyadventure.init.ModItems;
 import com.eddy1.easyadventure.menu.CoreSizeMenu;
 import com.mojang.serialization.MapCodec;
 import net.minecraft.core.BlockPos;
@@ -47,9 +48,17 @@ public class BaseCoreBlock extends BaseEntityBlock {
         return CODEC;
     }
 
-    public int getSizeX() { return defaultSizeX; }
-    public int getSizeY() { return defaultSizeY; }
-    public int getSizeZ() { return defaultSizeZ; }
+    public int getSizeX() {
+        return defaultSizeX;
+    }
+
+    public int getSizeY() {
+        return defaultSizeY;
+    }
+
+    public int getSizeZ() {
+        return defaultSizeZ;
+    }
 
     @Override
     public RenderShape getRenderShape(BlockState state) {
@@ -71,60 +80,82 @@ public class BaseCoreBlock extends BaseEntityBlock {
     @Override
     public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack) {
         super.setPlacedBy(level, pos, state, placer, stack);
-        if (!level.isClientSide) {
-            BlockEntity be = level.getBlockEntity(pos);
-            if (be instanceof BaseCoreBlockEntity core) {
-                // 1. 检查物品是否有自定义名字
-                if (stack.has(DataComponents.CUSTOM_NAME)) {
-                    String name = stack.getHoverName().getString();
-                    core.setBaseName(name);
-
-                    if (placer instanceof Player p) {
-                        p.displayClientMessage(Component.literal("§e[调试] 核心已命名为: " + name), true);
-                    }
-                }
-
-                core.initializeFoundation(core.getSizeX(), core.getSizeY(), core.getSizeZ());
-            }
+        if (level.isClientSide) {
+            return;
         }
+
+        BlockEntity blockEntity = level.getBlockEntity(pos);
+        if (!(blockEntity instanceof BaseCoreBlockEntity core)) {
+            return;
+        }
+
+        if (placer instanceof Player player) {
+            core.setOwnerFromPlayer(player);
+        }
+        if (stack.has(DataComponents.CUSTOM_NAME)) {
+            core.setBaseName(stack.getHoverName().getString());
+        }
+
+        core.initializeFoundation(core.getSizeX(), core.getSizeY(), core.getSizeZ());
     }
 
     @Override
-    protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult hitResult) {
-        if (stack.getItem() == Items.NAME_TAG && stack.has(DataComponents.CUSTOM_NAME)) {
-            if (!level.isClientSide) {
-                BlockEntity be = level.getBlockEntity(pos);
-                if (be instanceof BaseCoreBlockEntity core) {
-                    String newName = stack.getHoverName().getString();
-                    core.setBaseName(newName);
+    protected ItemInteractionResult useItemOn(
+            ItemStack stack,
+            BlockState state,
+            Level level,
+            BlockPos pos,
+            Player player,
+            InteractionHand hand,
+            BlockHitResult hitResult
+    ) {
+        if (stack.getItem() != Items.NAME_TAG || !stack.has(DataComponents.CUSTOM_NAME)) {
+            return super.useItemOn(stack, state, level, pos, player, hand, hitResult);
+        }
 
-                    level.playSound(null, pos, SoundEvents.ANVIL_USE, SoundSource.BLOCKS, 1.0f, 1.0f);
-                    player.displayClientMessage(Component.literal("§e[调试] 核心已重命名为: " + newName), true);
+        if (!level.isClientSide) {
+            BlockEntity blockEntity = level.getBlockEntity(pos);
+            if (blockEntity instanceof BaseCoreBlockEntity core) {
+                if (CoreAccessControl.denyIfNoAccess(player, core.getOwnerUUID(), core.getOwnerName())) {
+                    return ItemInteractionResult.SUCCESS;
+                }
 
-                    if (!player.isCreative()) {
-                        stack.shrink(1);
-                    }
+                core.setBaseName(stack.getHoverName().getString());
+                level.playSound(null, pos, SoundEvents.ANVIL_USE, SoundSource.BLOCKS, 1.0F, 1.0F);
+                player.displayClientMessage(Component.translatable("message.easyadventure.renamed"), true);
+                if (!player.isCreative()) {
+                    stack.shrink(1);
                 }
             }
-            return ItemInteractionResult.SUCCESS;
         }
-        return super.useItemOn(stack, state, level, pos, player, hand, hitResult);
+        return ItemInteractionResult.SUCCESS;
     }
 
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hitResult) {
-        ItemStack stack = player.getMainHandItem();
-        if (stack.getItem() == EasyAdventure.BASE_KEY_ITEM.get()) {
+        if (player.getMainHandItem().is(ModItems.BASE_KEY_ITEM.get())) {
             return InteractionResult.PASS;
         }
 
         if (!level.isClientSide && player instanceof ServerPlayer serverPlayer) {
-            BlockEntity be = level.getBlockEntity(pos);
-            if (be instanceof BaseCoreBlockEntity) {
+            BlockEntity blockEntity = level.getBlockEntity(pos);
+            if (blockEntity instanceof BaseCoreBlockEntity core) {
+                if (core.isBusy()) {
+                    player.displayClientMessage(Component.translatable("message.easyadventure.core_busy"), true);
+                    return InteractionResult.SUCCESS;
+                }
+                if (CoreAccessControl.denyIfNoAccess(player, core.getOwnerUUID(), core.getOwnerName())) {
+                    return InteractionResult.SUCCESS;
+                }
+
                 serverPlayer.openMenu(new SimpleMenuProvider(
-                        (id, inv, p) -> new CoreSizeMenu(id, inv, pos),
-                        Component.literal("设置基地大小")
-                ), buffer -> buffer.writeBlockPos(pos));
+                        (id, inventory, targetPlayer) -> new CoreSizeMenu(id, inventory, pos, false, core.isPasswordEnabled()),
+                        Component.translatable("gui.easyadventure.core_size_title")
+                ), buffer -> {
+                    buffer.writeBlockPos(pos);
+                    buffer.writeBoolean(false);
+                    buffer.writeBoolean(core.isPasswordEnabled());
+                });
             }
         }
         return InteractionResult.SUCCESS;

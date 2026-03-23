@@ -33,3 +33,4 @@ test/
 /src/main/resources/data/generated/
 .cache/
 replay_recordings/
+.gradle-user/

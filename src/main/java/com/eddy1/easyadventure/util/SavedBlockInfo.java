@@ -15,7 +15,7 @@ public record SavedBlockInfo(BlockPos relativePos, BlockState state, CompoundTag
         tag.putInt("Y", relativePos.getY());
         tag.putInt("Z", relativePos.getZ());
 
-        // 关键：使用 NbtUtils 保存 BlockState
+        // Use NbtUtils to preserve the full BlockState.
         tag.put("State", NbtUtils.writeBlockState(state));
 
         if (nbt != null) {

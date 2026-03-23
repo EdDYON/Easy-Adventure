@@ -1,25 +1,35 @@
+# Easy Adventure
 
-Installation information
-=======
+`Easy Adventure` 是一个基于 `NeoForge 1.21.1` 的基地收纳模组。
 
-This template repository can be directly cloned to get you started with a new
-mod. Simply create a new repository cloned from this one, by following the
-instructions provided by [GitHub](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-repository-from-a-template).
+你可以用一张卷轴绑定基地核心，把整座基地打包带走，再在别处重新展开。
 
-Once you have your clone, simply open the repository in the IDE of your choice. The usual recommendation for an IDE is either IntelliJ IDEA or Eclipse.
+## 环境要求
 
-If at any point you are missing libraries in your IDE, or you've run into problems you can
-run `gradlew --refresh-dependencies` to refresh the local cache. `gradlew clean` to reset everything 
-{this does not affect your code} and then start the process again.
+- Minecraft `1.21.1`
+- NeoForge `21.1.1+`
+- 需要客户端和服务端同时安装
 
-Mapping Names:
-============
-By default, the MDK is configured to use the official mapping names from Mojang for methods and fields 
-in the Minecraft codebase. These names are covered by a specific license. All modders should be aware of this
-license. For the latest license text, refer to the mapping file itself, or the reference copy here:
-https://github.com/NeoForged/NeoForm/blob/main/Mojang.md
 
-Additional Resources: 
-==========
-Community Documentation: https://docs.neoforged.net/  
-NeoForged Discord: https://discord.neoforged.net/
+- 卷轴中只保存轻量数据
+  - 基地 UUID
+  - 结构 UUID
+  - 主人信息
+  - 基地名称
+  - 尺寸信息
+  - 密码模式相关元数据
+- 基地本体数据保存在世界存档中
+
+默认存档文件位置：
+
+- 单人：`saves/<世界名>/data/easyadventure_buildings.dat`
+- 服务器：`<世界目录>/data/easyadventure_buildings.dat`
+
+
+### 强烈建议
+
+- 升级前先备份世界
+- 不要在基地正在收纳或释放到一半的时候换版本
+- 升级到新版本后，不建议再回退到旧版本
+
+
