@@ -8,13 +8,17 @@ import com.eddy1.easyadventure.block.core.CoreEntityTransport;
 import com.eddy1.easyadventure.block.core.CoreLifecycle;
 import com.eddy1.easyadventure.block.core.CorePackager;
 import com.eddy1.easyadventure.block.core.CorePasswordUtil;
+import com.eddy1.easyadventure.block.core.CorePermission;
 import com.eddy1.easyadventure.block.core.CorePersistence;
 import com.eddy1.easyadventure.block.core.CorePhaseProcessor;
 import com.eddy1.easyadventure.block.core.CorePreflight;
+import com.eddy1.easyadventure.block.core.CorePreview;
+import com.eddy1.easyadventure.block.core.CoreResident;
 import com.eddy1.easyadventure.block.core.CoreRuntimeState;
 import com.eddy1.easyadventure.block.core.CoreStoredState;
 import com.eddy1.easyadventure.block.core.CoreStructureWorkspace;
 import com.eddy1.easyadventure.block.core.CoreTerrainTracker;
+import com.eddy1.easyadventure.block.core.CoreUpgrade;
 import com.eddy1.easyadventure.block.core.CoreValidation;
 import com.eddy1.easyadventure.block.core.CoreVolume;
 import com.eddy1.easyadventure.init.ModBlockEntities;
@@ -22,32 +26,44 @@ import com.eddy1.easyadventure.storage.StructureSnapshot;
 import com.eddy1.easyadventure.util.BlockPlacementUtil;
 import com.eddy1.easyadventure.util.SavedBlockInfo;
 import com.eddy1.easyadventure.world.BuildingStorageData;
+import com.eddy1.easyadventure.world.TerritoryManager;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.NonNullList;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.Container;
+import net.minecraft.world.Containers;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Comparator;
+import java.util.EnumMap;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
-public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.BlockEntity {
+public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.BlockEntity implements Container {
+    private static final int BASE_BLOCKS_PER_TICK = 200;
+    private static final int BOOSTED_BLOCKS_PER_TICK = 280;
+
     public static final int MIN_SIZE_XZ = 3;
     public static final int MAX_SIZE_XZ = 64;
     public static final int MIN_SIZE_Y = 2;
     public static final int MAX_SIZE_Y = 320;
     public static final String DEFAULT_BASE_NAME = CoreStoredState.DEFAULT_BASE_NAME;
-
-    private static final int BLOCKS_PER_TICK = 200;
     private static final Comparator<SavedBlockInfo> PLACEMENT_ORDER = Comparator
             .comparingInt((SavedBlockInfo info) -> info.relativePos().getY())
             .thenComparingInt(info -> info.relativePos().getX())
@@ -70,8 +86,9 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
     private final CoreRuntimeState runtime = new CoreRuntimeState();
     private final CoreStructureWorkspace workspace = new CoreStructureWorkspace();
     private final CoreTerrainTracker terrainTracker = new CoreTerrainTracker();
+    private final NonNullList<ItemStack> upgradeFuelInventory = NonNullList.withSize(CoreUpgrade.values().length, ItemStack.EMPTY);
 
-    private CoreStoredState storedState = new CoreStoredState(DEFAULT_BASE_NAME, UUID.randomUUID(), null, null, null, false, null, false, false, 9, 5, 9);
+    private CoreStoredState storedState = new CoreStoredState(DEFAULT_BASE_NAME, UUID.randomUUID(), null, null, null, false, null, false, false, 9, 5, 9, Map.of(), Map.of());
     private State persistedRuntimeState = State.IDLE;
 
     public BaseCoreBlockEntity(BlockPos pos, BlockState blockState) {
@@ -80,7 +97,15 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
     }
 
     public static void tick(Level level, BlockPos pos, BlockState state, BaseCoreBlockEntity blockEntity) {
+        boolean passiveChanged = false;
+        if (level instanceof ServerLevel serverLevel) {
+            passiveChanged = blockEntity.tickUpgradeFuel(serverLevel);
+        }
+
         if (level.isClientSide || blockEntity.runtime.isIdle()) {
+            if (passiveChanged) {
+                blockEntity.setChanged();
+            }
             return;
         }
 
@@ -104,7 +129,8 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
         }
 
         boolean changed = false;
-        for (int i = 0; i < BLOCKS_PER_TICK && blockEntity.runtime.hasTasks(); i++) {
+        int blocksPerTick = blockEntity.getBlocksPerTick();
+        for (int i = 0; i < blocksPerTick && blockEntity.runtime.hasTasks(); i++) {
             BlockPos target = blockEntity.runtime.pollTask();
             if (target == null) {
                 break;
@@ -124,7 +150,7 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
             }
         }
 
-        if (changed) {
+        if (changed || passiveChanged) {
             blockEntity.setChanged();
         }
         if (!blockEntity.runtime.hasTasks()) {
@@ -135,14 +161,23 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
     @Override
     public void onLoad() {
         super.onLoad();
-        if (level == null || level.isClientSide) {
+        if (!(level instanceof ServerLevel serverLevel)) {
             return;
         }
 
-        if (storedState.activeStorageUUID() != null && level instanceof ServerLevel serverLevel) {
+        TerritoryManager.register(serverLevel, this);
+        if (storedState.activeStorageUUID() != null) {
             BuildingStorageData.get(serverLevel).lockBuilding(storedState.activeStorageUUID(), storedState.coreUUID());
         }
         resumePersistedWork();
+    }
+
+    @Override
+    public void setRemoved() {
+        if (level instanceof ServerLevel serverLevel) {
+            TerritoryManager.unregister(serverLevel, worldPosition);
+        }
+        super.setRemoved();
     }
 
     public int getSizeX() {
@@ -189,12 +224,85 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
         return storedState.passwordHash();
     }
 
-    public boolean canPlayerAccess(@Nullable Player player) {
-        return CoreAccessControl.canAccess(player, storedState.ownerUUID());
+    public Map<UUID, CoreResident> getResidents() {
+        return storedState.residents();
+    }
+
+    public List<CoreResident> getResidentList() {
+        return storedState.residents().values().stream()
+                .sorted(Comparator.comparing(CoreResident::name, String.CASE_INSENSITIVE_ORDER))
+                .toList();
+    }
+
+    public boolean hasUpgrade(CoreUpgrade upgrade) {
+        return storedState.hasUpgrade(upgrade);
+    }
+
+    public int getUpgradeFuelTicks(CoreUpgrade upgrade) {
+        return storedState.getUpgradeFuelTicks(upgrade);
+    }
+
+    public Map<CoreUpgrade, Integer> getUpgradeFuelTicks() {
+        return storedState.upgradeFuelTicks();
+    }
+
+    public int getActiveUpgradeCount() {
+        return storedState.activeUpgradeCount();
+    }
+
+    public int getUpgradeFuelSlotIndex(CoreUpgrade upgrade) {
+        return upgrade.ordinal();
+    }
+
+    public CoreVolume getTerritoryVolume() {
+        return currentVolume();
+    }
+
+    public boolean isTerritoryActive() {
+        return storedState.initialized();
+    }
+
+    public boolean canPlayerManage(@Nullable Player player) {
+        return CoreAccessControl.canAccess(player, storedState.ownerUUID())
+                || hasResidentPermission(player, CorePermission.RESIZE);
+    }
+
+    public boolean canResize(@Nullable Player player) {
+        return hasResidentPermission(player, CorePermission.RESIZE);
+    }
+
+    public boolean isResident(@Nullable Player player) {
+        if (CoreAccessControl.canAccess(player, storedState.ownerUUID())) {
+            return true;
+        }
+        return player != null && storedState.hasResident(player.getUUID());
+    }
+
+    public boolean hasResidentPermission(@Nullable Player player, CorePermission permission) {
+        if (CoreAccessControl.canAccess(player, storedState.ownerUUID())) {
+            return true;
+        }
+        return player != null && storedState.hasResidentPermission(player.getUUID(), permission);
+    }
+
+    public boolean canEnterTerritory(@Nullable Player player) {
+        return hasResidentPermission(player, CorePermission.ENTER);
+    }
+
+    public boolean canBuild(@Nullable Player player) {
+        return hasResidentPermission(player, CorePermission.BUILD);
+    }
+
+    public boolean canUseStorage(@Nullable Player player) {
+        return hasResidentPermission(player, CorePermission.STORAGE);
+    }
+
+    public boolean canUseDevices(@Nullable Player player) {
+        return hasResidentPermission(player, CorePermission.USE_DEVICES);
     }
 
     public boolean canPlayerOperate(@Nullable Player player, @Nullable String password) {
-        if (CoreAccessControl.canAccess(player, storedState.ownerUUID())) {
+        if (isResident(player)) {
             return true;
         }
         if (!storedState.passwordEnabled()) {
@@ -204,7 +312,7 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
     }
 
     public boolean isPasswordRequiredFor(@Nullable Player player) {
-        return storedState.passwordEnabled() && !CoreAccessControl.canAccess(player, storedState.ownerUUID());
+        return storedState.passwordEnabled() && !isResident(player);
     }
 
     public void setOwner(@Nullable UUID ownerUuid, @Nullable String ownerName) {
@@ -228,18 +336,27 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
     }
 
     public boolean updateSettings(@Nullable Player player, int newX, int newY, int newZ, boolean passwordEnabled, @Nullable String rawPassword) {
-        if (CoreAccessControl.denyIfNoAccess(player, storedState.ownerUUID(), storedState.ownerName())) {
+        boolean managerAccess = canPlayerManage(player);
+        if (!managerAccess && !canResize(player)) {
+            notifyPlayer(player, "message.easyadventure.not_authorized_operation");
             return false;
         }
 
-        if (!updatePasswordSettings(player, passwordEnabled, rawPassword)) {
+        String normalizedPassword = CorePasswordUtil.normalize(rawPassword);
+        if (!managerAccess) {
+            if (passwordEnabled != storedState.passwordEnabled() || normalizedPassword != null) {
+                notifyPlayer(player, "message.easyadventure.not_authorized_operation");
+                return false;
+            }
+        } else if (!updatePasswordSettings(player, passwordEnabled, rawPassword)) {
             return false;
         }
         return initializeFoundation(player, newX, newY, newZ);
     }
 
     public boolean updatePasswordSettings(@Nullable Player player, boolean passwordEnabled, @Nullable String rawPassword) {
-        if (CoreAccessControl.denyIfNoAccess(player, storedState.ownerUUID(), storedState.ownerName())) {
+        if (!canPlayerManage(player)) {
+            notifyPlayer(player, "message.easyadventure.not_authorized_operation");
             return false;
         }
 
@@ -271,7 +388,8 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
             notifyPlayer(player, "message.easyadventure.core_busy");
             return false;
         }
-        if (CoreAccessControl.denyIfNoAccess(player, storedState.ownerUUID(), storedState.ownerName())) {
+        if (!canResize(player)) {
+            notifyPlayer(player, "message.easyadventure.not_authorized_operation");
             return false;
         }
 
@@ -292,6 +410,9 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
         }
         applyStoredState(storedState.withSize(clampedX, clampedY, clampedZ).withInitialized(true));
         setChanged();
+        if (level instanceof ServerLevel serverLevel) {
+            TerritoryManager.refresh(serverLevel, this);
+        }
 
         if (level != null) {
             level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), Block.UPDATE_CLIENTS);
@@ -314,9 +435,24 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
             @Nullable String ownerName,
             boolean passwordEnabled,
             @Nullable String passwordHash,
-            @Nullable UUID storageUUID
+            @Nullable UUID storageUUID,
+            Map<UUID, CoreResident> residents,
+            Map<CoreUpgrade, Integer> upgradeFuelTicks,
+            Map<CoreUpgrade, Integer> queuedUpgradeFuelCounts
     ) {
-        return restoreFromSnapshot(StructureSnapshot.fromTag(heavyData), name, boundUUID, ownerUUID, ownerName, passwordEnabled, passwordHash, storageUUID);
+        return restoreFromSnapshot(
+                StructureSnapshot.fromTag(heavyData),
+                name,
+                boundUUID,
+                ownerUUID,
+                ownerName,
+                passwordEnabled,
+                passwordHash,
+                storageUUID,
+                residents,
+                upgradeFuelTicks,
+                queuedUpgradeFuelCounts
+        );
     }
 
     public boolean restoreFromSnapshot(
@@ -327,7 +463,10 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
             @Nullable String ownerName,
             boolean passwordEnabled,
             @Nullable String passwordHash,
-            @Nullable UUID storageUUID
+            @Nullable UUID storageUUID,
+            Map<UUID, CoreResident> residents,
+            Map<CoreUpgrade, Integer> upgradeFuelTicks,
+            Map<CoreUpgrade, Integer> queuedUpgradeFuelCounts
     ) {
         if (runtime.isBusy() || CoreValidation.containsNestedCore(snapshot)) {
             return false;
@@ -340,7 +479,13 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
                 .withBinding(true, boundUUID)
                 .withOwner(ownerUUID, ownerName)
                 .withPassword(passwordEnabled, passwordHash)
-                .withActiveStorage(storageUUID));
+                .withActiveStorage(storageUUID)
+                .withResidents(residents)
+                .withUpgradeFuelTicks(upgradeFuelTicks));
+        restoreQueuedUpgradeFuel(queuedUpgradeFuelCounts);
+        if (level instanceof ServerLevel serverLevel) {
+            TerritoryManager.refresh(serverLevel, this);
+        }
 
         workspace.importIncomingSnapshot(snapshot);
         terrainTracker.clear();
@@ -350,6 +495,90 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
         }
 
         startDeployment();
+        return true;
+    }
+
+    public boolean updateResident(@Nullable Player player, ResidentAction action, @Nullable String residentValue) {
+        if (runtime.isBusy()) {
+            notifyPlayer(player, "message.easyadventure.core_busy");
+            return false;
+        }
+        if (!canPlayerManage(player)) {
+            notifyPlayer(player, "message.easyadventure.not_authorized_operation");
+            return false;
+        }
+        if (!(level instanceof ServerLevel serverLevel)) {
+            return false;
+        }
+
+        switch (action) {
+            case ADD -> {
+                String normalizedName = normalizeInput(residentValue);
+                if (normalizedName == null) {
+                    notifyPlayer(player, "message.easyadventure.resident_name_required");
+                    return false;
+                }
+
+                Player target = serverLevel.getServer().getPlayerList().getPlayerByName(normalizedName);
+                UUID targetUuid;
+                String targetName;
+                if (target != null) {
+                    targetUuid = target.getUUID();
+                    targetName = target.getGameProfile().getName();
+                } else {
+                    notifyPlayer(player, Component.translatable("message.easyadventure.resident_not_found", normalizedName));
+                    return false;
+                }
+                if (storedState.ownerUUID() != null && storedState.ownerUUID().equals(targetUuid)) {
+                    notifyPlayer(player, Component.translatable("message.easyadventure.resident_is_owner", targetName));
+                    return false;
+                }
+
+                applyStoredState(storedState.addResident(targetUuid, targetName));
+                notifyPlayer(player, Component.translatable("message.easyadventure.resident_added", targetName));
+            }
+            case REMOVE -> {
+                UUID residentUuid = parseUuid(residentValue);
+                if (residentUuid == null || !storedState.residents().containsKey(residentUuid)) {
+                    notifyPlayer(player, "message.easyadventure.resident_missing");
+                    return false;
+                }
+
+                String removedName = storedState.residents().get(residentUuid).name();
+                applyStoredState(storedState.removeResident(residentUuid));
+                notifyPlayer(player, Component.translatable("message.easyadventure.resident_removed", removedName));
+            }
+        }
+
+        setChanged();
+        level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), Block.UPDATE_CLIENTS);
+        return true;
+    }
+
+    public boolean updateResidentPermission(@Nullable Player player, UUID residentUuid, CorePermission permission, boolean enabled) {
+        if (runtime.isBusy()) {
+            notifyPlayer(player, "message.easyadventure.core_busy");
+            return false;
+        }
+        if (!canPlayerManage(player)) {
+            notifyPlayer(player, "message.easyadventure.not_authorized_operation");
+            return false;
+        }
+        if (!storedState.residents().containsKey(residentUuid)) {
+            notifyPlayer(player, "message.easyadventure.resident_missing");
+            return false;
+        }
+        UUID effectiveUuid = player == null ? null : player.getUUID();
+        if (effectiveUuid != null && effectiveUuid.equals(residentUuid)) {
+            notifyPlayer(player, "message.easyadventure.resident_self_permission_denied");
+            return false;
+        }
+
+        applyStoredState(storedState.updateResidentPermission(residentUuid, permission, enabled));
+        setChanged();
+        if (level != null) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), Block.UPDATE_CLIENTS);
+        }
         return true;
     }
 
@@ -404,21 +633,21 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
     @Override
     protected void saveAdditional(CompoundTag tag, net.minecraft.core.HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
-        CorePersistence.save(tag, storedState, runtime.state(), terrainTracker, workspace);
+        CorePersistence.save(tag, storedState, runtime.state(), terrainTracker, workspace, upgradeFuelInventory, registries);
     }
 
     @Override
     protected void loadAdditional(CompoundTag tag, net.minecraft.core.HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
         applyStoredState(CorePersistence.loadStoredState(tag));
-        CorePersistence.loadTransientData(tag, terrainTracker, workspace);
+        CorePersistence.loadTransientData(tag, terrainTracker, workspace, upgradeFuelInventory, registries);
         persistedRuntimeState = CorePersistence.loadRuntimeState(tag);
     }
 
     @Override
     public CompoundTag getUpdateTag(net.minecraft.core.HolderLookup.Provider registries) {
         CompoundTag tag = super.getUpdateTag(registries);
-        CorePersistence.writeUpdateTag(tag, storedState);
+        CorePersistence.writeUpdateTag(tag, storedState, upgradeFuelInventory, registries);
         return tag;
     }
 
@@ -582,6 +811,8 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
             return;
         }
 
+        Map<CoreUpgrade, Integer> queuedUpgradeFuelCounts = getQueuedUpgradeFuelCounts();
+        clearContent();
         runtime.finish();
         setChanged();
         CorePackager.finishPacking(
@@ -594,7 +825,10 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
                 storedState.passwordEnabled(),
                 storedState.passwordHash(),
                 workspace,
-                currentVolume()
+                currentVolume(),
+                storedState.residents(),
+                storedState.upgradeFuelTicks(),
+                queuedUpgradeFuelCounts
         );
     }
 
@@ -653,6 +887,40 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
         CoreEffects.performCelebration(level, worldPosition);
     }
 
+    public void dropUpgradeFuelInventory() {
+        if (level == null || level.isClientSide || isEmpty()) {
+            return;
+        }
+
+        Containers.dropContents(level, worldPosition, this);
+        clearContent();
+    }
+
+    public Map<CoreUpgrade, Integer> getQueuedUpgradeFuelCounts() {
+        EnumMap<CoreUpgrade, Integer> queuedCounts = new EnumMap<>(CoreUpgrade.class);
+        for (CoreUpgrade upgrade : CoreUpgrade.values()) {
+            ItemStack stack = getItem(getUpgradeFuelSlotIndex(upgrade));
+            if (!stack.isEmpty()) {
+                queuedCounts.put(upgrade, stack.getCount());
+            }
+        }
+        return queuedCounts;
+    }
+
+    private void restoreQueuedUpgradeFuel(Map<CoreUpgrade, Integer> queuedUpgradeFuelCounts) {
+        clearContent();
+        if (queuedUpgradeFuelCounts == null || queuedUpgradeFuelCounts.isEmpty()) {
+            return;
+        }
+        for (CoreUpgrade upgrade : CoreUpgrade.values()) {
+            int count = Math.max(0, queuedUpgradeFuelCounts.getOrDefault(upgrade, 0));
+            if (count <= 0) {
+                continue;
+            }
+            upgradeFuelInventory.set(upgrade.ordinal(), new ItemStack(upgrade.material(), count));
+        }
+    }
+
     private void applyStoredState(CoreStoredState nextState) {
         storedState = new CoreStoredState(
                 normalizeBaseName(nextState.baseName()),
@@ -666,7 +934,9 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
                 nextState.initialized(),
                 clamp(nextState.sizeX(), MIN_SIZE_XZ, MAX_SIZE_XZ),
                 clamp(nextState.sizeY(), MIN_SIZE_Y, MAX_SIZE_Y),
-                clamp(nextState.sizeZ(), MIN_SIZE_XZ, MAX_SIZE_XZ)
+                clamp(nextState.sizeZ(), MIN_SIZE_XZ, MAX_SIZE_XZ),
+                nextState.residents(),
+                nextState.upgradeFuelTicks()
         );
     }
 
@@ -690,9 +960,108 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
         return trimmed.isEmpty() ? null : trimmed;
     }
 
+    private static @Nullable String normalizeInput(@Nullable String input) {
+        if (input == null) {
+            return null;
+        }
+
+        String trimmed = input.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private int getBlocksPerTick() {
+        return storedState.hasUpgrade(CoreUpgrade.FOLDING) ? BOOSTED_BLOCKS_PER_TICK : BASE_BLOCKS_PER_TICK;
+    }
+
+    private boolean tickUpgradeFuel(ServerLevel serverLevel) {
+        CoreStoredState nextState = storedState.tickUpgradeFuel(1);
+        boolean changed = nextState != storedState;
+        boolean refueled = false;
+        boolean expiredUpgrade = false;
+        for (CoreUpgrade upgrade : CoreUpgrade.values()) {
+            int previousTicks = storedState.getUpgradeFuelTicks(upgrade);
+            if (previousTicks > 0 && nextState.getUpgradeFuelTicks(upgrade) == 0) {
+                expiredUpgrade = true;
+            }
+            if (nextState.getUpgradeFuelTicks(upgrade) > 0) {
+                continue;
+            }
+
+            int slot = getUpgradeFuelSlotIndex(upgrade);
+            ItemStack fuelStack = getItem(slot);
+            if (fuelStack.isEmpty() || fuelStack.getCount() < upgrade.materialCount() || !fuelStack.is(upgrade.material())) {
+                continue;
+            }
+
+            fuelStack.shrink(upgrade.materialCount());
+            if (fuelStack.isEmpty()) {
+                upgradeFuelInventory.set(slot, ItemStack.EMPTY);
+            }
+
+            EnumMap<CoreUpgrade, Integer> updatedFuel = new EnumMap<>(CoreUpgrade.class);
+            updatedFuel.putAll(nextState.upgradeFuelTicks());
+            updatedFuel.put(upgrade, upgrade.durationPerFuelTicks());
+            nextState = nextState.withUpgradeFuelTicks(updatedFuel);
+            changed = true;
+            refueled = true;
+        }
+        if (!changed) {
+            return false;
+        }
+
+        applyStoredState(nextState);
+        if (refueled || expiredUpgrade || serverLevel.getGameTime() % 20 == 0) {
+            setChanged();
+        }
+        if (level != null && (refueled || expiredUpgrade || serverLevel.getGameTime() % 20 == 0)) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), Block.UPDATE_CLIENTS);
+        }
+        return refueled || expiredUpgrade || serverLevel.getGameTime() % 20 == 0;
+    }
+
+    public static Component formatDuration(int ticks) {
+        int totalSeconds = Math.max(0, ticks) / 20;
+        int hours = totalSeconds / 3600;
+        int minutes = (totalSeconds % 3600) / 60;
+        int seconds = totalSeconds % 60;
+        if (hours > 0) {
+            return Component.translatable("gui.easyadventure.duration_hours_minutes", hours, minutes);
+        }
+        if (minutes > 0) {
+            return Component.translatable("gui.easyadventure.duration_minutes_seconds", minutes, seconds);
+        }
+        return Component.translatable("gui.easyadventure.duration_seconds", seconds);
+    }
+
+    public boolean containsTerritoryPos(BlockPos pos) {
+        return storedState.initialized() && currentVolume().contains(worldPosition, pos);
+    }
+
+    private static @Nullable UUID parseUuid(@Nullable String rawUuid) {
+        String normalized = normalizeInput(rawUuid);
+        if (normalized == null) {
+            return null;
+        }
+
+        try {
+            return UUID.fromString(normalized);
+        } catch (IllegalArgumentException exception) {
+            return null;
+        }
+    }
+
     private static void notifyPlayer(@Nullable Player player, String translationKey) {
         if (player != null) {
-            player.displayClientMessage(Component.translatable(translationKey), true);
+            MutableComponent message = Component.translatable(translationKey);
+            boolean permissionWarning = isPermissionWarning(translationKey);
+            if (isPermissionWarning(translationKey)) {
+                message = message.withStyle(ChatFormatting.RED);
+            }
+            if (permissionWarning) {
+                player.sendSystemMessage(message);
+            } else {
+                player.displayClientMessage(message, true);
+            }
         }
     }
 
@@ -702,7 +1071,112 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
         }
     }
 
+    private static boolean isPermissionWarning(String translationKey) {
+        return "message.easyadventure.not_authorized_operation".equals(translationKey)
+                || "message.easyadventure.resident_self_permission_denied".equals(translationKey)
+                || translationKey.startsWith("message.easyadventure.territory_");
+    }
+
+    @Override
+    public int getContainerSize() {
+        return upgradeFuelInventory.size();
+    }
+
+    @Override
+    public boolean isEmpty() {
+        for (ItemStack stack : upgradeFuelInventory) {
+            if (!stack.isEmpty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    @Override
+    public ItemStack getItem(int slot) {
+        return slot >= 0 && slot < upgradeFuelInventory.size() ? upgradeFuelInventory.get(slot) : ItemStack.EMPTY;
+    }
+
+    @Override
+    public ItemStack removeItem(int slot, int amount) {
+        if (slot < 0 || slot >= upgradeFuelInventory.size() || amount <= 0) {
+            return ItemStack.EMPTY;
+        }
+
+        ItemStack removed = getItem(slot).split(amount);
+        if (!removed.isEmpty()) {
+            setChanged();
+            if (level != null) {
+                level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), Block.UPDATE_CLIENTS);
+            }
+        }
+        return removed;
+    }
+
+    @Override
+    public ItemStack removeItemNoUpdate(int slot) {
+        if (slot < 0 || slot >= upgradeFuelInventory.size()) {
+            return ItemStack.EMPTY;
+        }
+
+        ItemStack removed = upgradeFuelInventory.get(slot);
+        upgradeFuelInventory.set(slot, ItemStack.EMPTY);
+        return removed;
+    }
+
+    @Override
+    public void setItem(int slot, ItemStack stack) {
+        if (slot < 0 || slot >= upgradeFuelInventory.size()) {
+            return;
+        }
+        if (!stack.isEmpty() && !canPlaceItem(slot, stack)) {
+            return;
+        }
+
+        upgradeFuelInventory.set(slot, stack);
+        setChanged();
+        if (level != null) {
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), Block.UPDATE_CLIENTS);
+        }
+    }
+
+    @Override
+    public boolean stillValid(Player player) {
+        if (level == null || level.getBlockEntity(worldPosition) != this) {
+            return false;
+        }
+        return player.distanceToSqr(worldPosition.getX() + 0.5D, worldPosition.getY() + 0.5D, worldPosition.getZ() + 0.5D) <= 64.0D;
+    }
+
+    @Override
+    public boolean canPlaceItem(int slot, ItemStack stack) {
+        if (slot < 0 || slot >= CoreUpgrade.values().length) {
+            return false;
+        }
+        return stack.is(CoreUpgrade.fromId(slot).material());
+    }
+
+    @Override
+    public void clearContent() {
+        for (int i = 0; i < upgradeFuelInventory.size(); i++) {
+            upgradeFuelInventory.set(i, ItemStack.EMPTY);
+        }
+    }
+
     private CoreVolume currentVolume() {
         return storedState.volume();
+    }
+
+    public enum ResidentAction {
+        ADD,
+        REMOVE;
+
+        public static ResidentAction fromId(int id) {
+            ResidentAction[] values = values();
+            if (id < 0 || id >= values.length) {
+                return ADD;
+            }
+            return values[id];
+        }
     }
 }

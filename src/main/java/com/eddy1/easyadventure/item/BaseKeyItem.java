@@ -8,6 +8,7 @@ import com.eddy1.easyadventure.block.core.CorePreflight;
 import com.eddy1.easyadventure.block.core.CorePreview;
 import com.eddy1.easyadventure.block.core.CoreValidation;
 import com.eddy1.easyadventure.block.core.CoreVolume;
+import com.eddy1.easyadventure.block.core.CoreUpgrade;
 import com.eddy1.easyadventure.init.ModBlocks;
 import com.eddy1.easyadventure.menu.KeyPasswordMenu;
 import com.eddy1.easyadventure.network.KeyOperationAction;
@@ -20,12 +21,14 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.Direction;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
@@ -36,8 +39,10 @@ import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.Rotation;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public class BaseKeyItem extends Item {
@@ -81,6 +86,13 @@ public class BaseKeyItem extends Item {
         if (KeyDataUtil.isPasswordEnabled(stack)) {
             tooltipComponents.add(Component.translatable("tooltip.easyadventure.password_enabled").withStyle(ChatFormatting.GOLD));
         }
+        if (!KeyDataUtil.getResidents(stack).isEmpty()) {
+            tooltipComponents.add(Component.translatable("tooltip.easyadventure.residents", KeyDataUtil.getResidents(stack).size()).withStyle(ChatFormatting.BLUE));
+        }
+        int activeUpgrades = (int) KeyDataUtil.getUpgradeFuelTicks(stack).values().stream().filter(ticks -> ticks > 0).count();
+        if (activeUpgrades > 0) {
+            tooltipComponents.add(Component.translatable("tooltip.easyadventure.upgrades", activeUpgrades).withStyle(ChatFormatting.LIGHT_PURPLE));
+        }
         if (KeyDataUtil.hasStoredStructure(stack)) {
             tooltipComponents.add(Component.translatable(
                     "tooltip.easyadventure.key_size",
@@ -88,7 +100,47 @@ public class BaseKeyItem extends Item {
                     KeyDataUtil.getStoredSizeY(stack),
                     KeyDataUtil.getStoredSizeZ(stack)
             ).withStyle(ChatFormatting.AQUA));
+            tooltipComponents.add(Component.translatable(
+                    "tooltip.easyadventure.key_contents",
+                    KeyDataUtil.getBlockCount(stack),
+                    KeyDataUtil.getBlockEntityCount(stack),
+                    KeyDataUtil.getEntityCount(stack)
+            ).withStyle(ChatFormatting.DARK_AQUA));
+
+            String packedAt = KeyDataUtil.getPackedAt(stack);
+            if (packedAt != null) {
+                tooltipComponents.add(Component.translatable("tooltip.easyadventure.packed_at", packedAt).withStyle(ChatFormatting.GRAY));
+            }
+
+            String sourceDimension = KeyDataUtil.getSourceDimension(stack);
+            if (sourceDimension != null) {
+                tooltipComponents.add(Component.translatable("tooltip.easyadventure.source_dimension", sourceDimension).withStyle(ChatFormatting.GRAY));
+            }
+
+            tooltipComponents.add(Component.translatable(
+                    "tooltip.easyadventure.deploy_rotation",
+                    Component.translatable(rotationLabelKey(KeyDataUtil.getDeployRotation(stack)))
+            ).withStyle(ChatFormatting.LIGHT_PURPLE));
         }
+    }
+
+    @Override
+    public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
+        ItemStack stack = player.getItemInHand(hand);
+        migrateLegacyDisplayData(stack);
+        if (!player.isShiftKeyDown() || !KeyDataUtil.hasStoredStructure(stack)) {
+            return InteractionResultHolder.pass(stack);
+        }
+
+        if (!level.isClientSide) {
+            int nextRotation = (KeyDataUtil.getDeployRotation(stack) + 1) % 4;
+            KeyDataUtil.setDeployRotation(stack, nextRotation);
+            player.displayClientMessage(Component.translatable(
+                    "message.easyadventure.rotation_changed",
+                    Component.translatable(rotationLabelKey(nextRotation))
+            ), true);
+        }
+        return InteractionResultHolder.sidedSuccess(stack, level.isClientSide());
     }
 
     @Override
@@ -154,7 +206,8 @@ public class BaseKeyItem extends Item {
     }
 
     private InteractionResult previewPacking(ServerLevel level, Player player, BaseCoreBlockEntity core) {
-        if (CoreAccessControl.denyIfNoAccess(player, core.getOwnerUUID(), core.getOwnerName())) {
+        if (!core.canPlayerOperate(player, null)) {
+            sendKeyAccessDenied(player, core.isPasswordEnabled());
             return InteractionResult.FAIL;
         }
 
@@ -168,6 +221,12 @@ public class BaseKeyItem extends Item {
                 core.getSizeZ(),
                 result.occupiedBlocks(),
                 result.blockedBlocks()
+        ), false);
+        player.displayClientMessage(Component.translatable(
+                "message.easyadventure.preview_pack_details",
+                result.blockEntityCount(),
+                result.containerCount(),
+                result.entityCount()
         ), false);
         if (!result.ok() && result.reason() != null) {
             player.displayClientMessage(result.reason(), false);
@@ -201,7 +260,8 @@ public class BaseKeyItem extends Item {
         if (storageUUID == null) {
             return InteractionResult.PASS;
         }
-        if (CoreAccessControl.denyIfNoAccess(player, KeyDataUtil.getOwnerUuid(stack), KeyDataUtil.getOwnerName(stack))) {
+        if (!canUseKeyOperation(player, stack, null)) {
+            sendKeyAccessDenied(player, KeyDataUtil.isPasswordEnabled(stack));
             return InteractionResult.FAIL;
         }
         if (!(context.getLevel() instanceof ServerLevel serverLevel)) {
@@ -215,7 +275,7 @@ public class BaseKeyItem extends Item {
             return InteractionResult.FAIL;
         }
 
-        StructureSnapshot snapshot = StructureSnapshot.fromTag(heavyData);
+        StructureSnapshot snapshot = StructureSnapshot.fromTag(heavyData).rotated(toRotation(KeyDataUtil.getDeployRotation(stack)));
         BlockPos placePos = context.getClickedPos().relative(context.getClickedFace());
         CoreAreaCheckResult result = CorePreflight.checkDeployment(serverLevel, placePos, snapshot);
         CorePreview.show(serverLevel, placePos, new CoreVolume(snapshot.sizeX(), snapshot.sizeY(), snapshot.sizeZ()), !result.ok());
@@ -226,6 +286,12 @@ public class BaseKeyItem extends Item {
                 snapshot.sizeZ(),
                 result.occupiedBlocks(),
                 result.blockedBlocks()
+        ), false);
+        player.displayClientMessage(Component.translatable(
+                "message.easyadventure.preview_deploy_details",
+                snapshot.blockCount(),
+                snapshot.blockEntityCount(),
+                snapshot.entityCount()
         ), false);
         if (!result.ok() && result.reason() != null) {
             player.displayClientMessage(result.reason(), false);
@@ -239,9 +305,7 @@ public class BaseKeyItem extends Item {
             return InteractionResult.PASS;
         }
         if (!canUseKeyOperation(player, stack, password)) {
-            player.displayClientMessage(Component.translatable(
-                    KeyDataUtil.isPasswordEnabled(stack) ? "message.easyadventure.password_incorrect" : "message.easyadventure.not_authorized_operation"
-            ), true);
+            sendKeyAccessDenied(player, KeyDataUtil.isPasswordEnabled(stack));
             return InteractionResult.FAIL;
         }
 
@@ -254,30 +318,18 @@ public class BaseKeyItem extends Item {
         BuildingStorageData storage = BuildingStorageData.get(serverLevel);
         UUID coreUuid = KeyDataUtil.getBoundUuid(stack);
         var heavyData = storage.getBuilding(storageUUID);
-        boolean restoredFromBackup = false;
-        if (heavyData == null && coreUuid != null) {
-            UUID restoredStorageUuid = storage.restoreLatestBackup(coreUuid);
-            if (restoredStorageUuid != null) {
-                storageUUID = restoredStorageUuid;
-                heavyData = storage.getBuilding(restoredStorageUuid);
-                restoredFromBackup = true;
-                player.displayClientMessage(Component.translatable("message.easyadventure.backup_restored"), true);
-            }
-        }
         if (heavyData == null) {
             player.displayClientMessage(Component.translatable("message.easyadventure.storage_missing"), true);
             return InteractionResult.FAIL;
         }
 
         StructureSnapshot snapshot = StructureSnapshot.fromTag(heavyData);
-        if (restoredFromBackup) {
-            KeyDataUtil.setStoredStructureReference(stack, storageUUID, snapshot.sizeX(), snapshot.sizeY(), snapshot.sizeZ());
-        }
         if (CoreValidation.containsNestedCore(snapshot)) {
             player.displayClientMessage(Component.translatable("message.easyadventure.stored_nested_core"), true);
             return InteractionResult.FAIL;
         }
 
+        snapshot = snapshot.rotated(toRotation(KeyDataUtil.getDeployRotation(stack)));
         CoreAreaCheckResult precheck = CorePreflight.checkDeployment(serverLevel, placePos, snapshot);
         if (!precheck.ok()) {
             CorePreview.show(serverLevel, placePos, new CoreVolume(snapshot.sizeX(), snapshot.sizeY(), snapshot.sizeZ()), true);
@@ -310,7 +362,10 @@ public class BaseKeyItem extends Item {
                 KeyDataUtil.getOwnerName(stack),
                 KeyDataUtil.isPasswordEnabled(stack),
                 KeyDataUtil.getPasswordHash(stack),
-                storageUUID
+                storageUUID,
+                KeyDataUtil.getResidents(stack),
+                KeyDataUtil.getUpgradeFuelTicks(stack),
+                KeyDataUtil.getQueuedUpgradeFuelCounts(stack)
         )) {
             level.removeBlock(placePos, false);
             storage.unlockBuilding(storageUUID, effectiveCoreUuid);
@@ -344,11 +399,12 @@ public class BaseKeyItem extends Item {
     }
 
     private boolean requiresDeployPassword(Player player, ItemStack stack) {
-        return KeyDataUtil.isPasswordEnabled(stack) && !CoreAccessControl.canAccess(player, KeyDataUtil.getOwnerUuid(stack));
+        return KeyDataUtil.isPasswordEnabled(stack)
+                && !isResident(player, stack);
     }
 
     private boolean canUseKeyOperation(Player player, ItemStack stack, String password) {
-        if (CoreAccessControl.canAccess(player, KeyDataUtil.getOwnerUuid(stack))) {
+        if (isResident(player, stack)) {
             return true;
         }
         if (!KeyDataUtil.isPasswordEnabled(stack)) {
@@ -369,7 +425,10 @@ public class BaseKeyItem extends Item {
                 core.getPasswordHash(),
                 0,
                 0,
-                0
+                0,
+                core.getResidents(),
+                core.getUpgradeFuelTicks(),
+                Map.of()
         );
         stack.remove(DataComponents.CUSTOM_NAME);
     }
@@ -398,14 +457,17 @@ public class BaseKeyItem extends Item {
                         stack,
                         boundUuid,
                         KeyDataUtil.getStorageUuid(stack),
-                        KeyDataUtil.getOwnerUuid(stack),
+                KeyDataUtil.getOwnerUuid(stack),
                         KeyDataUtil.getOwnerName(stack),
                         customNameText,
                         KeyDataUtil.isPasswordEnabled(stack),
                         KeyDataUtil.getPasswordHash(stack),
                         KeyDataUtil.getStoredSizeX(stack),
                         KeyDataUtil.getStoredSizeY(stack),
-                        KeyDataUtil.getStoredSizeZ(stack)
+                        KeyDataUtil.getStoredSizeZ(stack),
+                        KeyDataUtil.getResidents(stack),
+                        KeyDataUtil.getUpgradeFuelTicks(stack),
+                        KeyDataUtil.getQueuedUpgradeFuelCounts(stack)
                 );
             }
         }
@@ -421,5 +483,45 @@ public class BaseKeyItem extends Item {
         if (player instanceof ServerPlayer serverPlayer) {
             serverPlayer.containerMenu.broadcastChanges();
         }
+    }
+
+    private static void sendKeyAccessDenied(Player player, boolean passwordProtected) {
+        MutableComponent message = Component.translatable(
+                passwordProtected ? "message.easyadventure.password_incorrect" : "message.easyadventure.not_authorized_operation"
+        );
+        boolean overlay = passwordProtected;
+        if (!passwordProtected) {
+            message = message.withStyle(ChatFormatting.RED);
+        }
+        if (overlay) {
+            player.displayClientMessage(message, true);
+        } else {
+            player.sendSystemMessage(message);
+        }
+    }
+
+    private static boolean isResident(Player player, ItemStack stack) {
+        if (CoreAccessControl.canAccess(player, KeyDataUtil.getOwnerUuid(stack))) {
+            return true;
+        }
+        return KeyDataUtil.getResidents(stack).containsKey(player.getUUID());
+    }
+
+    private static Rotation toRotation(int rotationId) {
+        return switch (Math.floorMod(rotationId, 4)) {
+            case 1 -> Rotation.CLOCKWISE_90;
+            case 2 -> Rotation.CLOCKWISE_180;
+            case 3 -> Rotation.COUNTERCLOCKWISE_90;
+            default -> Rotation.NONE;
+        };
+    }
+
+    private static String rotationLabelKey(int rotationId) {
+        return switch (Math.floorMod(rotationId, 4)) {
+            case 1 -> "tooltip.easyadventure.rotation_90";
+            case 2 -> "tooltip.easyadventure.rotation_180";
+            case 3 -> "tooltip.easyadventure.rotation_270";
+            default -> "tooltip.easyadventure.rotation_0";
+        };
     }
 }

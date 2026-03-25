@@ -11,18 +11,15 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 public class BuildingStorageData extends SavedData {
     private static final String DATA_NAME = "easyadventure_buildings";
-    private static final int MAX_BACKUPS = 3;
 
     private final Map<UUID, CompoundTag> buildingMap = new HashMap<>();
     private final Map<UUID, UUID> lockMap = new HashMap<>();
     private final Map<UUID, UUID> activeByCoreMap = new HashMap<>();
-    private final Map<UUID, List<CompoundTag>> backupMap = new HashMap<>();
 
     public static BuildingStorageData get(ServerLevel level) {
         ServerLevel overworld = level.getServer().getLevel(Level.OVERWORLD);
@@ -41,7 +38,6 @@ public class BuildingStorageData extends SavedData {
         CompoundTag copy = buildingData.copy();
         buildingMap.put(id, copy);
         activeByCoreMap.put(coreUuid, id);
-        addBackup(coreUuid, copy);
         setDirty();
         return id;
     }
@@ -88,38 +84,11 @@ public class BuildingStorageData extends SavedData {
         setDirty();
     }
 
-    public @Nullable UUID restoreLatestBackup(UUID coreUuid) {
-        List<CompoundTag> backups = backupMap.get(coreUuid);
-        if (backups == null || backups.isEmpty()) {
-            return null;
-        }
-
-        UUID restoredId = UUID.randomUUID();
-        buildingMap.put(restoredId, backups.get(0).copy());
-        activeByCoreMap.put(coreUuid, restoredId);
-        setDirty();
-        return restoredId;
-    }
-
-    public int getBackupCount(UUID coreUuid) {
-        List<CompoundTag> backups = backupMap.get(coreUuid);
-        return backups == null ? 0 : backups.size();
-    }
-
-    private void addBackup(UUID coreUuid, CompoundTag buildingData) {
-        List<CompoundTag> backups = backupMap.computeIfAbsent(coreUuid, unused -> new ArrayList<>());
-        backups.add(0, buildingData.copy());
-        while (backups.size() > MAX_BACKUPS) {
-            backups.remove(backups.size() - 1);
-        }
-    }
-
     public static BuildingStorageData load(CompoundTag nbt, HolderLookup.Provider provider) {
         BuildingStorageData data = new BuildingStorageData();
         loadActiveBuildings(nbt, data);
         loadLocks(nbt, data);
         loadActiveByCore(nbt, data);
-        loadBackups(nbt, data);
         return data;
     }
 
@@ -154,24 +123,6 @@ public class BuildingStorageData extends SavedData {
         }
     }
 
-    private static void loadBackups(CompoundTag nbt, BuildingStorageData data) {
-        ListTag list = nbt.getList("Backups", Tag.TAG_COMPOUND);
-        for (Tag tag : list) {
-            CompoundTag entry = (CompoundTag) tag;
-            if (!entry.hasUUID("Core")) {
-                continue;
-            }
-
-            List<CompoundTag> backups = new ArrayList<>();
-            for (Tag snapshotTag : entry.getList("Entries", Tag.TAG_COMPOUND)) {
-                backups.add(((CompoundTag) snapshotTag).copy());
-            }
-            if (!backups.isEmpty()) {
-                data.backupMap.put(entry.getUUID("Core"), backups);
-            }
-        }
-    }
-
     @Override
     public CompoundTag save(CompoundTag nbt, HolderLookup.Provider provider) {
         ListTag activeList = new ListTag();
@@ -200,19 +151,6 @@ public class BuildingStorageData extends SavedData {
             activeByCoreList.add(entry);
         });
         nbt.put("ActiveByCore", activeByCoreList);
-
-        ListTag backupList = new ListTag();
-        backupMap.forEach((coreUuid, backups) -> {
-            CompoundTag entry = new CompoundTag();
-            entry.putUUID("Core", coreUuid);
-            ListTag entries = new ListTag();
-            for (CompoundTag backup : backups) {
-                entries.add(backup.copy());
-            }
-            entry.put("Entries", entries);
-            backupList.add(entry);
-        });
-        nbt.put("Backups", backupList);
         return nbt;
     }
 }

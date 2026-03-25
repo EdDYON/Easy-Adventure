@@ -9,6 +9,9 @@ public record CoreAreaCheckResult(
         int totalPositions,
         int occupiedBlocks,
         int blockedBlocks,
+        int blockEntityCount,
+        int containerCount,
+        int entityCount,
         @Nullable BlockPos blockedPos,
         @Nullable Component reason
 ) {

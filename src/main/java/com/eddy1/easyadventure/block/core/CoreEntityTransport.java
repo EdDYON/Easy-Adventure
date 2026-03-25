@@ -17,6 +17,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
+import java.util.function.Predicate;
 
 public final class CoreEntityTransport {
     private CoreEntityTransport() {
@@ -28,30 +29,7 @@ public final class CoreEntityTransport {
         }
 
         AABB area = volume.createAabb(center);
-        List<Entity> entities = level.getEntitiesOfClass(Entity.class, area, entity -> {
-            if (entity instanceof Player) {
-                return false;
-            }
-            if (entity instanceof ItemEntity || entity instanceof FireworkRocketEntity) {
-                return false;
-            }
-            if (entity.getType().is(CoreCompat.SKIP_ENTITY_CAPTURE)) {
-                return false;
-            }
-            if (entity.isPassenger() || !entity.getPassengers().isEmpty()) {
-                return false;
-            }
-            if (entity instanceof Mob mob && mob.isLeashed()) {
-                return false;
-            }
-
-            ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
-            if (id.getPath().contains("dragon") || id.getPath().contains("wither")) {
-                return false;
-            }
-
-            return !entity.hasPassenger(passenger -> passenger instanceof Player);
-        });
+        List<Entity> entities = level.getEntitiesOfClass(Entity.class, area, capturableEntityPredicate());
 
         for (Entity entity : entities) {
             CompoundTag entityTag = new CompoundTag();
@@ -84,5 +62,36 @@ public final class CoreEntityTransport {
                 level.addFreshEntity(entity);
             });
         }
+    }
+
+    public static int countCapturable(Level level, BlockPos center, CoreVolume volume) {
+        return level.getEntitiesOfClass(Entity.class, volume.createAabb(center), capturableEntityPredicate()).size();
+    }
+
+    private static Predicate<Entity> capturableEntityPredicate() {
+        return entity -> {
+            if (entity instanceof Player) {
+                return false;
+            }
+            if (entity instanceof ItemEntity || entity instanceof FireworkRocketEntity) {
+                return false;
+            }
+            if (entity.getType().is(CoreCompat.SKIP_ENTITY_CAPTURE)) {
+                return false;
+            }
+            if (entity.isPassenger() || !entity.getPassengers().isEmpty()) {
+                return false;
+            }
+            if (entity instanceof Mob mob && mob.isLeashed()) {
+                return false;
+            }
+
+            ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
+            if (id.getPath().contains("dragon") || id.getPath().contains("wither")) {
+                return false;
+            }
+
+            return !entity.hasPassenger(passenger -> passenger instanceof Player);
+        };
     }
 }

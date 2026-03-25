@@ -1,6 +1,7 @@
 package com.eddy1.easyadventure.block.core;
 
 import com.eddy1.easyadventure.init.ModItems;
+import com.eddy1.easyadventure.storage.StructureSnapshot;
 import com.eddy1.easyadventure.util.KeyDataUtil;
 import com.eddy1.easyadventure.world.BuildingStorageData;
 import net.minecraft.core.BlockPos;
@@ -16,9 +17,16 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import org.jetbrains.annotations.Nullable;
 
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.util.Map;
 import java.util.UUID;
 
 public final class CorePackager {
+    private static final DateTimeFormatter PACKED_AT_FORMAT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm 'UTC'").withZone(ZoneOffset.UTC);
+
     private CorePackager() {
     }
 
@@ -42,7 +50,11 @@ public final class CorePackager {
             @Nullable String ownerName,
             boolean passwordEnabled,
             @Nullable String passwordHash,
-            CoreVolume volume
+            CoreVolume volume,
+            Map<UUID, CoreResident> residents,
+            Map<CoreUpgrade, Integer> upgradeFuelTicks,
+            Map<CoreUpgrade, Integer> queuedUpgradeFuelCounts,
+            StructureSnapshot snapshot
     ) {
         ItemStack keyStack = new ItemStack(ModItems.BASE_KEY_ITEM.get());
         KeyDataUtil.setKeyData(
@@ -56,7 +68,22 @@ public final class CorePackager {
                 passwordHash,
                 volume.sizeX(),
                 volume.sizeY(),
-                volume.sizeZ()
+                volume.sizeZ(),
+                residents,
+                upgradeFuelTicks,
+                queuedUpgradeFuelCounts
+        );
+        KeyDataUtil.setStoredStructureReference(
+                keyStack,
+                storageUuid,
+                snapshot.sizeX(),
+                snapshot.sizeY(),
+                snapshot.sizeZ(),
+                snapshot.packedAt(),
+                snapshot.sourceDimension(),
+                snapshot.blockCount(),
+                snapshot.blockEntityCount(),
+                snapshot.entityCount()
         );
         return keyStack;
     }
@@ -80,8 +107,8 @@ public final class CorePackager {
         }
     }
 
-    public static UUID storePackedSnapshot(BuildingStorageData storage, UUID coreUuid, CoreStructureWorkspace workspace, CoreVolume volume) {
-        return storage.saveBuilding(coreUuid, workspace.createPackedSnapshot(volume).toTag());
+    public static UUID storePackedSnapshot(BuildingStorageData storage, UUID coreUuid, StructureSnapshot snapshot) {
+        return storage.saveBuilding(coreUuid, snapshot.toTag());
     }
 
     public static void finishPacking(
@@ -94,14 +121,22 @@ public final class CorePackager {
             boolean passwordEnabled,
             @Nullable String passwordHash,
             CoreStructureWorkspace workspace,
-            CoreVolume volume
+            CoreVolume volume,
+            Map<UUID, CoreResident> residents,
+            Map<CoreUpgrade, Integer> upgradeFuelTicks,
+            Map<CoreUpgrade, Integer> queuedUpgradeFuelCounts
     ) {
         if (level instanceof ServerLevel serverLevel) {
-            UUID storageUUID = storePackedSnapshot(BuildingStorageData.get(serverLevel), coreUuid, workspace, volume);
+            StructureSnapshot snapshot = workspace.createPackedSnapshot(
+                    volume,
+                    PACKED_AT_FORMAT.format(Instant.now()),
+                    serverLevel.dimension().location().toString()
+            );
+            UUID storageUUID = storePackedSnapshot(BuildingStorageData.get(serverLevel), coreUuid, snapshot);
             giveOrDropPackedKey(
-                    level,
-                    origin,
-                    createPackedKey(baseName, coreUuid, storageUUID, ownerUuid, ownerName, passwordEnabled, passwordHash, volume),
+                level,
+                origin,
+                    createPackedKey(baseName, coreUuid, storageUUID, ownerUuid, ownerName, passwordEnabled, passwordHash, volume, residents, upgradeFuelTicks, queuedUpgradeFuelCounts, snapshot),
                     ownerUuid
             );
         }

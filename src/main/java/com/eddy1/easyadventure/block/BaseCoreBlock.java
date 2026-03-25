@@ -1,10 +1,10 @@
 package com.eddy1.easyadventure.block;
 
-import com.eddy1.easyadventure.block.core.CoreAccessControl;
 import com.eddy1.easyadventure.init.ModBlockEntities;
 import com.eddy1.easyadventure.init.ModItems;
 import com.eddy1.easyadventure.menu.CoreSizeMenu;
 import com.mojang.serialization.MapCodec;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
@@ -21,6 +21,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseEntityBlock;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityTicker;
@@ -78,6 +79,17 @@ public class BaseCoreBlock extends BaseEntityBlock {
     }
 
     @Override
+    protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
+        if (!state.is(newState.getBlock())) {
+            BlockEntity blockEntity = level.getBlockEntity(pos);
+            if (blockEntity instanceof BaseCoreBlockEntity core) {
+                core.dropUpgradeFuelInventory();
+            }
+        }
+        super.onRemove(state, level, pos, newState, movedByPiston);
+    }
+
+    @Override
     public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack) {
         super.setPlacedBy(level, pos, state, placer, stack);
         if (level.isClientSide) {
@@ -116,7 +128,8 @@ public class BaseCoreBlock extends BaseEntityBlock {
         if (!level.isClientSide) {
             BlockEntity blockEntity = level.getBlockEntity(pos);
             if (blockEntity instanceof BaseCoreBlockEntity core) {
-                if (CoreAccessControl.denyIfNoAccess(player, core.getOwnerUUID(), core.getOwnerName())) {
+                if (!core.canPlayerManage(player)) {
+                    player.sendSystemMessage(Component.translatable("message.easyadventure.not_authorized_operation").withStyle(ChatFormatting.RED));
                     return ItemInteractionResult.SUCCESS;
                 }
 
@@ -144,17 +157,19 @@ public class BaseCoreBlock extends BaseEntityBlock {
                     player.displayClientMessage(Component.translatable("message.easyadventure.core_busy"), true);
                     return InteractionResult.SUCCESS;
                 }
-                if (CoreAccessControl.denyIfNoAccess(player, core.getOwnerUUID(), core.getOwnerName())) {
+                if (!core.canPlayerManage(player)) {
+                    player.sendSystemMessage(Component.translatable("message.easyadventure.not_authorized_operation").withStyle(ChatFormatting.RED));
                     return InteractionResult.SUCCESS;
                 }
 
                 serverPlayer.openMenu(new SimpleMenuProvider(
-                        (id, inventory, targetPlayer) -> new CoreSizeMenu(id, inventory, pos, false, core.isPasswordEnabled()),
+                        (id, inventory, targetPlayer) -> new CoreSizeMenu(id, inventory, pos, false, core.isPasswordEnabled(), core.isBound()),
                         Component.translatable("gui.easyadventure.core_size_title")
                 ), buffer -> {
                     buffer.writeBlockPos(pos);
                     buffer.writeBoolean(false);
                     buffer.writeBoolean(core.isPasswordEnabled());
+                    buffer.writeBoolean(core.isBound());
                 });
             }
         }

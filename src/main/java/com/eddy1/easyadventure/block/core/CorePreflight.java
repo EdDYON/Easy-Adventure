@@ -5,6 +5,7 @@ import com.eddy1.easyadventure.storage.StructureSnapshot;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.Container;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -14,15 +15,17 @@ public final class CorePreflight {
 
     public static CoreAreaCheckResult checkPacking(Level level, BlockPos center, CoreVolume volume) {
         if (!hasAreaLoaded(level, center, volume)) {
-            return new CoreAreaCheckResult(false, 0, 0, 1, null, Component.translatable("message.easyadventure.precheck_chunks_unloaded"));
+            return new CoreAreaCheckResult(false, 0, 0, 1, 0, 0, 0, null, Component.translatable("message.easyadventure.precheck_chunks_unloaded"));
         }
         if (!isWithinBounds(level, center, volume)) {
-            return new CoreAreaCheckResult(false, 0, 0, 1, null, Component.translatable("message.easyadventure.precheck_world_bounds"));
+            return new CoreAreaCheckResult(false, 0, 0, 1, 0, 0, 0, null, Component.translatable("message.easyadventure.precheck_world_bounds"));
         }
 
         int total = 0;
         int occupied = 0;
         int blocked = 0;
+        int blockEntities = 0;
+        int containers = 0;
         BlockPos blockedPos = null;
         Component reason = null;
 
@@ -41,6 +44,12 @@ public final class CorePreflight {
                     }
 
                     occupied++;
+                    if (level.getBlockEntity(pos) != null) {
+                        blockEntities++;
+                        if (level.getBlockEntity(pos) instanceof Container) {
+                            containers++;
+                        }
+                    }
                     if (state.getBlock() instanceof BaseCoreBlock) {
                         blocked++;
                         if (reason == null) {
@@ -73,16 +82,26 @@ public final class CorePreflight {
             }
         }
 
-        return new CoreAreaCheckResult(blocked == 0, total, occupied, blocked, blockedPos, reason);
+        return new CoreAreaCheckResult(
+                blocked == 0,
+                total,
+                occupied,
+                blocked,
+                blockEntities,
+                containers,
+                CoreEntityTransport.countCapturable(level, center, volume),
+                blockedPos,
+                reason
+        );
     }
 
     public static CoreAreaCheckResult checkDeployment(ServerLevel level, BlockPos center, StructureSnapshot snapshot) {
         CoreVolume volume = new CoreVolume(snapshot.sizeX(), snapshot.sizeY(), snapshot.sizeZ());
         if (!hasAreaLoaded(level, center, volume)) {
-            return new CoreAreaCheckResult(false, 0, 0, 1, null, Component.translatable("message.easyadventure.precheck_chunks_unloaded"));
+            return new CoreAreaCheckResult(false, 0, 0, 1, snapshot.blockEntityCount(), 0, snapshot.entityCount(), null, Component.translatable("message.easyadventure.precheck_chunks_unloaded"));
         }
         if (!isWithinBounds(level, center, volume)) {
-            return new CoreAreaCheckResult(false, 0, 0, 1, null, Component.translatable("message.easyadventure.precheck_world_bounds"));
+            return new CoreAreaCheckResult(false, 0, 0, 1, snapshot.blockEntityCount(), 0, snapshot.entityCount(), null, Component.translatable("message.easyadventure.precheck_world_bounds"));
         }
 
         int total = 0;
@@ -125,7 +144,17 @@ public final class CorePreflight {
             }
         }
 
-        return new CoreAreaCheckResult(blocked == 0, total, occupied, blocked, blockedPos, reason);
+        return new CoreAreaCheckResult(
+                blocked == 0,
+                total,
+                occupied,
+                blocked,
+                snapshot.blockEntityCount(),
+                0,
+                snapshot.entityCount(),
+                blockedPos,
+                reason
+        );
     }
 
     private static boolean hasAreaLoaded(Level level, BlockPos center, CoreVolume volume) {

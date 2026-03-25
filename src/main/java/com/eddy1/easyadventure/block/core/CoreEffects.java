@@ -5,7 +5,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.particles.ParticleTypes;
-import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetTitlesAnimationPacket;
@@ -106,7 +105,6 @@ public final class CoreEffects {
         Collections.shuffle(possibleEffects, random);
         serverPlayer.addEffect(new MobEffectInstance(possibleEffects.get(0), 1200, 1));
         serverPlayer.addEffect(new MobEffectInstance(possibleEffects.get(1), 1200, 1));
-
         serverPlayer.connection.send(new ClientboundSetTitlesAnimationPacket(10, 100, 20));
         serverPlayer.connection.send(new ClientboundSetTitleTextPacket(CoreCelebrationTexts.randomTitle(random)));
         serverPlayer.connection.send(new ClientboundSetSubtitleTextPacket(CoreCelebrationTexts.randomSubtitle(random)));
