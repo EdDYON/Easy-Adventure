@@ -17,7 +17,6 @@ import com.eddy1.easyadventure.util.KeyDataUtil;
 import com.eddy1.easyadventure.world.BuildingStorageData;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.Direction;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
@@ -33,13 +32,13 @@ import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.item.Item.TooltipContext;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.Rotation;
+import net.minecraftforge.network.NetworkHooks;
 
 import java.util.List;
 import java.util.Map;
@@ -69,8 +68,8 @@ public class BaseKeyItem extends Item {
     }
 
     @Override
-    public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltipComponents, TooltipFlag tooltipFlag) {
-        super.appendHoverText(stack, context, tooltipComponents, tooltipFlag);
+    public void appendHoverText(ItemStack stack, Level level, List<Component> tooltipComponents, TooltipFlag tooltipFlag) {
+        super.appendHoverText(stack, level, tooltipComponents, tooltipFlag);
         if (KeyDataUtil.hasStoredStructure(stack)) {
             tooltipComponents.add(Component.translatable("tooltip.easyadventure.key_contains").withStyle(ChatFormatting.GREEN));
         } else if (KeyDataUtil.hasBoundUuid(stack)) {
@@ -383,7 +382,7 @@ public class BaseKeyItem extends Item {
         Component title = Component.translatable(
                 action == KeyOperationAction.PACK ? "gui.easyadventure.password_pack_title" : "gui.easyadventure.password_deploy_title"
         );
-        player.openMenu(new SimpleMenuProvider(
+        NetworkHooks.openScreen(player, new SimpleMenuProvider(
                 (containerId, inventory, targetPlayer) -> new KeyPasswordMenu(containerId, inventory, action, pos, face, hand),
                 title
         ), buffer -> {
@@ -430,7 +429,9 @@ public class BaseKeyItem extends Item {
                 core.getUpgradeFuelTicks(),
                 Map.of()
         );
-        stack.remove(DataComponents.CUSTOM_NAME);
+        if (stack.hasCustomHoverName()) {
+            stack.resetHoverName();
+        }
     }
 
     private static String getEffectiveBaseName(ItemStack stack) {
@@ -446,7 +447,7 @@ public class BaseKeyItem extends Item {
             return;
         }
 
-        Component customName = stack.get(DataComponents.CUSTOM_NAME);
+        Component customName = stack.hasCustomHoverName() ? stack.getHoverName() : null;
         String customNameText = customName == null ? null : customName.getString().trim();
         String baseName = KeyDataUtil.getBaseName(stack);
         boolean hasBaseName = baseName != null && !baseName.isBlank();
@@ -457,7 +458,7 @@ public class BaseKeyItem extends Item {
                         stack,
                         boundUuid,
                         KeyDataUtil.getStorageUuid(stack),
-                KeyDataUtil.getOwnerUuid(stack),
+                        KeyDataUtil.getOwnerUuid(stack),
                         KeyDataUtil.getOwnerName(stack),
                         customNameText,
                         KeyDataUtil.isPasswordEnabled(stack),
@@ -472,8 +473,8 @@ public class BaseKeyItem extends Item {
             }
         }
 
-        if (stack.has(DataComponents.CUSTOM_NAME)) {
-            stack.remove(DataComponents.CUSTOM_NAME);
+        if (stack.hasCustomHoverName()) {
+            stack.resetHoverName();
         }
     }
 

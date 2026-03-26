@@ -41,16 +41,14 @@ import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
-import net.neoforged.neoforge.capabilities.Capabilities;
-import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.common.util.TriState;
-import net.neoforged.neoforge.event.entity.living.MobSpawnEvent;
-import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
-import net.neoforged.neoforge.event.level.BlockEvent;
-import net.neoforged.neoforge.event.level.ExplosionEvent;
-import net.neoforged.neoforge.event.level.block.CropGrowEvent;
-import net.neoforged.neoforge.event.tick.LevelTickEvent;
-import net.neoforged.neoforge.event.tick.PlayerTickEvent;
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.common.capabilities.ForgeCapabilities;
+import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.living.MobSpawnEvent;
+import net.minecraftforge.event.entity.player.PlayerInteractEvent;
+import net.minecraftforge.event.level.BlockEvent;
+import net.minecraftforge.event.level.ExplosionEvent;
+import net.minecraftforge.eventbus.api.Event;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -70,21 +68,21 @@ public final class TerritoryEvents {
     }
 
     public static void register() {
-        NeoForge.EVENT_BUS.addListener(TerritoryEvents::onPlayerTick);
-        NeoForge.EVENT_BUS.addListener(TerritoryEvents::onBreakBlock);
-        NeoForge.EVENT_BUS.addListener(TerritoryEvents::onPlaceBlock);
-        NeoForge.EVENT_BUS.addListener(TerritoryEvents::onMultiPlaceBlock);
-        NeoForge.EVENT_BUS.addListener(TerritoryEvents::onRightClickBlock);
-        NeoForge.EVENT_BUS.addListener(TerritoryEvents::onRightClickItem);
-        NeoForge.EVENT_BUS.addListener(TerritoryEvents::onExplosionDetonate);
-        NeoForge.EVENT_BUS.addListener(TerritoryEvents::onCropGrow);
-        NeoForge.EVENT_BUS.addListener(TerritoryEvents::onFarmlandTrample);
-        NeoForge.EVENT_BUS.addListener(TerritoryEvents::onMobSpawnCheck);
-        NeoForge.EVENT_BUS.addListener(TerritoryEvents::onLevelTick);
+        MinecraftForge.EVENT_BUS.addListener(TerritoryEvents::onPlayerTick);
+        MinecraftForge.EVENT_BUS.addListener(TerritoryEvents::onBreakBlock);
+        MinecraftForge.EVENT_BUS.addListener(TerritoryEvents::onPlaceBlock);
+        MinecraftForge.EVENT_BUS.addListener(TerritoryEvents::onMultiPlaceBlock);
+        MinecraftForge.EVENT_BUS.addListener(TerritoryEvents::onRightClickBlock);
+        MinecraftForge.EVENT_BUS.addListener(TerritoryEvents::onRightClickItem);
+        MinecraftForge.EVENT_BUS.addListener(TerritoryEvents::onExplosionDetonate);
+        MinecraftForge.EVENT_BUS.addListener(TerritoryEvents::onCropGrow);
+        MinecraftForge.EVENT_BUS.addListener(TerritoryEvents::onFarmlandTrample);
+        MinecraftForge.EVENT_BUS.addListener(TerritoryEvents::onMobSpawnCheck);
+        MinecraftForge.EVENT_BUS.addListener(TerritoryEvents::onLevelTick);
     }
 
-    private static void onPlayerTick(PlayerTickEvent.Post event) {
-        if (!(event.getEntity() instanceof ServerPlayer player)) {
+    private static void onPlayerTick(TickEvent.PlayerTickEvent event) {
+        if (event.phase != TickEvent.Phase.END || !(event.player instanceof ServerPlayer player)) {
             return;
         }
 
@@ -232,14 +230,14 @@ public final class TerritoryEvents {
                 TerritoryManager.findContainingCores(level, pos).stream().anyMatch(core -> core.hasUpgrade(CoreUpgrade.BLAST_SHIELD)));
     }
 
-    private static void onCropGrow(CropGrowEvent.Pre event) {
+    private static void onCropGrow(BlockEvent.CropGrowEvent.Pre event) {
         if (!(event.getLevel() instanceof ServerLevel level)) {
             return;
         }
 
         BaseCoreBlockEntity core = findCoreWithUpgrade(level, event.getPos(), CoreUpgrade.GREENHOUSE);
         if (core != null && level.random.nextFloat() < 0.15F) {
-            event.setResult(CropGrowEvent.Pre.Result.GROW);
+            event.setResult(Event.Result.ALLOW);
         }
     }
 
@@ -254,7 +252,8 @@ public final class TerritoryEvents {
     }
 
     private static void onMobSpawnCheck(MobSpawnEvent.PositionCheck event) {
-        if (!(event.getLevel().getLevel() instanceof ServerLevel level)) {
+        ServerLevel level = event.getLevel().getLevel();
+        if (level == null) {
             return;
         }
         if (event.getEntity().getType().getCategory() != MobCategory.MONSTER) {
@@ -264,12 +263,12 @@ public final class TerritoryEvents {
             return;
         }
         if (level.random.nextFloat() < 0.5F) {
-            event.setResult(MobSpawnEvent.PositionCheck.Result.FAIL);
+            event.setResult(Event.Result.DENY);
         }
     }
 
-    private static void onLevelTick(LevelTickEvent.Post event) {
-        if (!(event.getLevel() instanceof ServerLevel level)) {
+    private static void onLevelTick(TickEvent.LevelTickEvent event) {
+        if (event.phase != TickEvent.Phase.END || !(event.level instanceof ServerLevel level)) {
             return;
         }
 
@@ -339,8 +338,8 @@ public final class TerritoryEvents {
     }
 
     private static void cancelInteract(PlayerInteractEvent.RightClickBlock event) {
-        event.setUseBlock(TriState.FALSE);
-        event.setUseItem(TriState.FALSE);
+        event.setUseBlock(Event.Result.DENY);
+        event.setUseItem(Event.Result.DENY);
         event.setCancellationResult(InteractionResult.FAIL);
         event.setCanceled(true);
     }
@@ -476,11 +475,15 @@ public final class TerritoryEvents {
     }
 
     private static boolean hasItemHandler(ServerLevel level, BlockPos pos) {
-        if (level.getCapability(Capabilities.ItemHandler.BLOCK, pos, null) != null) {
+        BlockEntity blockEntity = level.getBlockEntity(pos);
+        if (blockEntity == null) {
+            return false;
+        }
+        if (blockEntity.getCapability(ForgeCapabilities.ITEM_HANDLER, null).isPresent()) {
             return true;
         }
         for (Direction direction : Direction.values()) {
-            if (level.getCapability(Capabilities.ItemHandler.BLOCK, pos, direction) != null) {
+            if (blockEntity.getCapability(ForgeCapabilities.ITEM_HANDLER, direction).isPresent()) {
                 return true;
             }
         }
@@ -488,11 +491,15 @@ public final class TerritoryEvents {
     }
 
     private static boolean hasFluidHandler(ServerLevel level, BlockPos pos) {
-        if (level.getCapability(Capabilities.FluidHandler.BLOCK, pos, null) != null) {
+        BlockEntity blockEntity = level.getBlockEntity(pos);
+        if (blockEntity == null) {
+            return false;
+        }
+        if (blockEntity.getCapability(ForgeCapabilities.FLUID_HANDLER, null).isPresent()) {
             return true;
         }
         for (Direction direction : Direction.values()) {
-            if (level.getCapability(Capabilities.FluidHandler.BLOCK, pos, direction) != null) {
+            if (blockEntity.getCapability(ForgeCapabilities.FLUID_HANDLER, direction).isPresent()) {
                 return true;
             }
         }
@@ -500,11 +507,15 @@ public final class TerritoryEvents {
     }
 
     private static boolean hasEnergyStorage(ServerLevel level, BlockPos pos) {
-        if (level.getCapability(Capabilities.EnergyStorage.BLOCK, pos, null) != null) {
+        BlockEntity blockEntity = level.getBlockEntity(pos);
+        if (blockEntity == null) {
+            return false;
+        }
+        if (blockEntity.getCapability(ForgeCapabilities.ENERGY, null).isPresent()) {
             return true;
         }
         for (Direction direction : Direction.values()) {
-            if (level.getCapability(Capabilities.EnergyStorage.BLOCK, pos, direction) != null) {
+            if (blockEntity.getCapability(ForgeCapabilities.ENERGY, direction).isPresent()) {
                 return true;
             }
         }

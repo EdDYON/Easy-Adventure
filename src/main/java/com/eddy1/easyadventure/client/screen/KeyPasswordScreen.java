@@ -2,6 +2,7 @@ package com.eddy1.easyadventure.client.screen;
 
 import com.eddy1.easyadventure.block.core.CorePasswordUtil;
 import com.eddy1.easyadventure.menu.KeyPasswordMenu;
+import com.eddy1.easyadventure.network.EasyAdventureNetwork;
 import com.eddy1.easyadventure.network.SubmitKeyPasswordPayload;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -9,7 +10,6 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
-import net.neoforged.neoforge.network.PacketDistributor;
 
 public class KeyPasswordScreen extends AbstractContainerScreen<KeyPasswordMenu> {
     private EditBox passwordEdit;
@@ -43,7 +43,7 @@ public class KeyPasswordScreen extends AbstractContainerScreen<KeyPasswordMenu> 
     }
 
     private void submit() {
-        PacketDistributor.sendToServer(new SubmitKeyPasswordPayload(
+        EasyAdventureNetwork.sendToServer(new SubmitKeyPasswordPayload(
                 menu.getAction(),
                 menu.getPos(),
                 menu.getFace(),
@@ -61,7 +61,7 @@ public class KeyPasswordScreen extends AbstractContainerScreen<KeyPasswordMenu> 
 
     @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(guiGraphics, mouseX, mouseY, partialTick);
+        renderBackground(guiGraphics);
         super.render(guiGraphics, mouseX, mouseY, partialTick);
         renderTooltip(guiGraphics, mouseX, mouseY);
     }

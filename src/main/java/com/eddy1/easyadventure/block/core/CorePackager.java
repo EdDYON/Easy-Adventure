@@ -36,7 +36,7 @@ public final class CorePackager {
             return null;
         }
 
-        CompoundTag tag = blockEntity.saveWithFullMetadata(level.registryAccess());
+        CompoundTag tag = blockEntity.saveWithFullMetadata();
         Clearable.tryClear(blockEntity);
         level.removeBlockEntity(pos);
         return tag;

@@ -1,16 +1,14 @@
 package com.eddy1.easyadventure.network;
 
-import com.eddy1.easyadventure.EasyAdventure;
 import com.eddy1.easyadventure.block.BaseCoreBlockEntity;
 import com.eddy1.easyadventure.block.core.CorePasswordUtil;
 import net.minecraft.core.BlockPos;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
+import net.minecraftforge.network.NetworkEvent;
+
+import java.util.function.Supplier;
 
 public record UpdateCoreSizePayload(
         BlockPos pos,
@@ -19,37 +17,32 @@ public record UpdateCoreSizePayload(
         int sizeZ,
         boolean passwordEnabled,
         String password
-) implements CustomPacketPayload {
-    public static final Type<UpdateCoreSizePayload> TYPE =
-            new Type<>(ResourceLocation.fromNamespaceAndPath(EasyAdventure.MODID, "update_core_size"));
-
-    public static final StreamCodec<RegistryFriendlyByteBuf, UpdateCoreSizePayload> STREAM_CODEC = StreamCodec.of(
-            (buf, payload) -> {
-                BlockPos.STREAM_CODEC.encode(buf, payload.pos);
-                buf.writeInt(payload.sizeX);
-                buf.writeInt(payload.sizeY);
-                buf.writeInt(payload.sizeZ);
-                buf.writeBoolean(payload.passwordEnabled);
-                buf.writeUtf(payload.password, CorePasswordUtil.MAX_PASSWORD_LENGTH);
-            },
-            buf -> new UpdateCoreSizePayload(
-                    BlockPos.STREAM_CODEC.decode(buf),
-                    buf.readInt(),
-                    buf.readInt(),
-                    buf.readInt(),
-                    buf.readBoolean(),
-                    buf.readUtf(CorePasswordUtil.MAX_PASSWORD_LENGTH)
-            )
-    );
-
-    @Override
-    public Type<? extends CustomPacketPayload> type() {
-        return TYPE;
+) {
+    public static void encode(UpdateCoreSizePayload payload, FriendlyByteBuf buf) {
+        buf.writeBlockPos(payload.pos);
+        buf.writeInt(payload.sizeX);
+        buf.writeInt(payload.sizeY);
+        buf.writeInt(payload.sizeZ);
+        buf.writeBoolean(payload.passwordEnabled);
+        buf.writeUtf(payload.password, CorePasswordUtil.MAX_PASSWORD_LENGTH);
     }
 
-    public static void handle(UpdateCoreSizePayload payload, IPayloadContext context) {
+    public static UpdateCoreSizePayload decode(FriendlyByteBuf buf) {
+        return new UpdateCoreSizePayload(
+                buf.readBlockPos(),
+                buf.readInt(),
+                buf.readInt(),
+                buf.readInt(),
+                buf.readBoolean(),
+                buf.readUtf(CorePasswordUtil.MAX_PASSWORD_LENGTH)
+        );
+    }
+
+    public static void handle(UpdateCoreSizePayload payload, Supplier<NetworkEvent.Context> contextSupplier) {
+        NetworkEvent.Context context = contextSupplier.get();
         context.enqueueWork(() -> {
-            if (!(context.player() instanceof ServerPlayer serverPlayer)) {
+            ServerPlayer serverPlayer = context.getSender();
+            if (serverPlayer == null) {
                 return;
             }
 
@@ -73,5 +66,6 @@ public record UpdateCoreSizePayload(
                 );
             }
         });
+        context.setPacketHandled(true);
     }
 }

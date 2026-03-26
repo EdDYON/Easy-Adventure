@@ -34,3 +34,4 @@ test/
 .cache/
 replay_recordings/
 .gradle-user/
+.tools/

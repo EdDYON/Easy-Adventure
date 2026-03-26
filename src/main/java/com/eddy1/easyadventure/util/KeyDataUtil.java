@@ -2,12 +2,10 @@ package com.eddy1.easyadventure.util;
 
 import com.eddy1.easyadventure.block.core.CoreResident;
 import com.eddy1.easyadventure.block.core.CoreUpgrade;
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.component.CustomData;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Collections;
@@ -241,7 +239,6 @@ public final class KeyDataUtil {
         writeResidents(tag, residents);
         writeUpgradeFuel(tag, upgradeFuelTicks);
         writeUpgradeFuelCounts(tag, queuedUpgradeFuelCounts);
-        stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
     }
 
     public static void setStoredStructureReference(
@@ -266,22 +263,18 @@ public final class KeyDataUtil {
         tag.putInt(BLOCK_COUNT, Math.max(0, blockCount));
         tag.putInt(BLOCK_ENTITY_COUNT, Math.max(0, blockEntityCount));
         tag.putInt(ENTITY_COUNT, Math.max(0, entityCount));
-        stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
     }
 
     public static void setDeployRotation(ItemStack stack, int rotation) {
         CompoundTag tag = getOrCreateTag(stack);
         tag.putInt(DEPLOY_ROTATION, normalizeRotation(rotation));
-        stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
     }
 
     public static void clearStoredStructure(ItemStack stack) {
-        CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
-        if (customData == null) {
+        CompoundTag tag = stack.getTag();
+        if (tag == null) {
             return;
         }
-
-        CompoundTag tag = customData.copyTag();
         tag.remove(STORAGE_UUID);
         tag.remove(SIZE_X);
         tag.remove(SIZE_Y);
@@ -294,20 +287,16 @@ public final class KeyDataUtil {
         tag.remove(DEPLOY_ROTATION);
         tag.remove(UPGRADE_FUEL_QUEUE);
         if (tag.isEmpty()) {
-            stack.remove(DataComponents.CUSTOM_DATA);
-        } else {
-            stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
+            stack.setTag(null);
         }
     }
 
     private static @Nullable CompoundTag getTag(ItemStack stack) {
-        CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
-        return customData == null ? null : customData.copyTag();
+        return stack.getTag();
     }
 
     private static CompoundTag getOrCreateTag(ItemStack stack) {
-        CompoundTag tag = getTag(stack);
-        return tag == null ? new CompoundTag() : tag;
+        return stack.getOrCreateTag();
     }
 
     private static Map<UUID, CoreResident> readResidents(ListTag residentList, boolean legacyCollaborators) {
@@ -420,7 +409,7 @@ public final class KeyDataUtil {
                 CoreUpgrade upgrade = CoreUpgrade.valueOf(fuelTag.getString("Upgrade"));
                 int count = Math.max(0, fuelTag.getInt("Count"));
                 if (count > 0) {
-                    queuedCounts.put(upgrade, Math.min(upgrade.material().getDefaultMaxStackSize(), count));
+                    queuedCounts.put(upgrade, Math.min(upgrade.material().getMaxStackSize(), count));
                 }
             } catch (IllegalArgumentException exception) {
                 // Ignore invalid upgrade ids.

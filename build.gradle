@@ -1,49 +1,92 @@
 plugins {
-    id 'net.neoforged.moddev' version '1.0.21'
+    id 'eclipse'
+    id 'idea'
+    id 'maven-publish'
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
 }
 
-group = 'com.eddy1.easyadventure'
-version = '1.6.1'
+version = mod_version
+group = mod_group_id
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
-    }
+base {
+    archivesName = mod_id
 }
 
-neoForge {
-    version = '21.1.1'
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
-    mods {
-        easyadventure {
-            sourceSet sourceSets.main
-        }
-    }
+minecraft {
+    mappings channel: mapping_channel, version: mapping_version
 
     runs {
         configureEach {
-            systemProperty 'forge.logging.markers', 'REGISTRIES'
-            systemProperty 'forge.logging.console.level', 'debug'
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+
+            mods {
+                "${mod_id}" {
+                    source sourceSets.main
+                }
+            }
         }
 
         client {
-            client()
-            jvmArguments.addAll '-Xms1G', '-Xmx4G'
-            programArguments.addAll '--username', 'DevUser'
+            args '--username', 'DevUser'
         }
 
         server {
-            server()
-            programArgument '--nogui'
+            args '--nogui'
         }
     }
 }
 
 repositories {
     mavenCentral()
-    maven { url = 'https://maven.neoforged.net/releases' }
+    maven { url = 'https://maven.minecraftforge.net' }
     maven { url = 'https://mirrors.aliyun.com/maven/' }
 }
 
 dependencies {
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+}
+
+tasks.named('processResources', ProcessResources).configure {
+    def replaceProperties = [
+            minecraft_version       : minecraft_version,
+            minecraft_version_range : minecraft_version_range,
+            forge_version           : forge_version,
+            forge_version_range     : forge_version_range,
+            loader_version_range    : loader_version_range,
+            mod_id                  : mod_id,
+            mod_name                : mod_name,
+            mod_license             : mod_license,
+            mod_version             : mod_version,
+            mod_authors             : mod_authors,
+            mod_description         : mod_description
+    ]
+    inputs.properties replaceProperties
+
+    filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
+        expand replaceProperties
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 17
+}
+
+jar {
+    manifest {
+        attributes([
+                'Specification-Title'     : mod_id,
+                'Specification-Vendor'    : mod_authors,
+                'Specification-Version'   : '1',
+                'Implementation-Title'    : project.name,
+                'Implementation-Version'  : project.version,
+                'Implementation-Vendor'   : mod_authors,
+                'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
+        ])
+    }
+    finalizedBy 'reobfJar'
 }

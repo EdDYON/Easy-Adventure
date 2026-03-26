@@ -20,14 +20,14 @@ public final class CoreCompat {
     }
 
     private static TagKey<Block> blockTag(String path) {
-        return TagKey.create(Registries.BLOCK, ResourceLocation.fromNamespaceAndPath(EasyAdventure.MODID, path));
+        return TagKey.create(Registries.BLOCK, EasyAdventure.id(path));
     }
 
     private static TagKey<EntityType<?>> entityTag(String path) {
-        return TagKey.create(Registries.ENTITY_TYPE, ResourceLocation.fromNamespaceAndPath(EasyAdventure.MODID, path));
+        return TagKey.create(Registries.ENTITY_TYPE, EasyAdventure.id(path));
     }
 
     private static TagKey<Item> itemTag(String path) {
-        return TagKey.create(Registries.ITEM, ResourceLocation.fromNamespaceAndPath(EasyAdventure.MODID, path));
+        return TagKey.create(Registries.ITEM, EasyAdventure.id(path));
     }
 }

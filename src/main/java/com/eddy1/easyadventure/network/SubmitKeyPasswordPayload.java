@@ -1,18 +1,16 @@
 package com.eddy1.easyadventure.network;
 
-import com.eddy1.easyadventure.EasyAdventure;
 import com.eddy1.easyadventure.block.BaseCoreBlockEntity;
 import com.eddy1.easyadventure.item.BaseKeyItem;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
+import net.minecraftforge.network.NetworkEvent;
+
+import java.util.function.Supplier;
 
 public record SubmitKeyPasswordPayload(
         KeyOperationAction action,
@@ -20,35 +18,30 @@ public record SubmitKeyPasswordPayload(
         Direction face,
         InteractionHand hand,
         String password
-) implements CustomPacketPayload {
-    public static final Type<SubmitKeyPasswordPayload> TYPE =
-            new Type<>(ResourceLocation.fromNamespaceAndPath(EasyAdventure.MODID, "submit_key_password"));
-
-    public static final StreamCodec<RegistryFriendlyByteBuf, SubmitKeyPasswordPayload> STREAM_CODEC = StreamCodec.of(
-            (buf, payload) -> {
-                buf.writeVarInt(payload.action.ordinal());
-                BlockPos.STREAM_CODEC.encode(buf, payload.pos);
-                buf.writeVarInt(payload.face.get3DDataValue());
-                buf.writeVarInt(payload.hand.ordinal());
-                buf.writeUtf(payload.password, 64);
-            },
-            buf -> new SubmitKeyPasswordPayload(
-                    KeyOperationAction.fromId(buf.readVarInt()),
-                    BlockPos.STREAM_CODEC.decode(buf),
-                    Direction.from3DDataValue(buf.readVarInt()),
-                    InteractionHand.values()[buf.readVarInt()],
-                    buf.readUtf(64)
-            )
-    );
-
-    @Override
-    public Type<? extends CustomPacketPayload> type() {
-        return TYPE;
+) {
+    public static void encode(SubmitKeyPasswordPayload payload, FriendlyByteBuf buf) {
+        buf.writeVarInt(payload.action.ordinal());
+        buf.writeBlockPos(payload.pos);
+        buf.writeVarInt(payload.face.get3DDataValue());
+        buf.writeEnum(payload.hand);
+        buf.writeUtf(payload.password, 64);
     }
 
-    public static void handle(SubmitKeyPasswordPayload payload, IPayloadContext context) {
+    public static SubmitKeyPasswordPayload decode(FriendlyByteBuf buf) {
+        return new SubmitKeyPasswordPayload(
+                KeyOperationAction.fromId(buf.readVarInt()),
+                buf.readBlockPos(),
+                Direction.from3DDataValue(buf.readVarInt()),
+                buf.readEnum(InteractionHand.class),
+                buf.readUtf(64)
+        );
+    }
+
+    public static void handle(SubmitKeyPasswordPayload payload, Supplier<NetworkEvent.Context> contextSupplier) {
+        NetworkEvent.Context context = contextSupplier.get();
         context.enqueueWork(() -> {
-            if (!(context.player() instanceof ServerPlayer serverPlayer)) {
+            ServerPlayer serverPlayer = context.getSender();
+            if (serverPlayer == null) {
                 return;
             }
 
@@ -70,5 +63,6 @@ public record SubmitKeyPasswordPayload(
 
             BaseKeyItem.handlePasswordAction(serverPlayer, payload.hand(), payload.action(), payload.pos(), payload.face(), payload.password());
         });
+        context.setPacketHandled(true);
     }
 }

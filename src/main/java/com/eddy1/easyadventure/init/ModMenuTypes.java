@@ -3,22 +3,22 @@ package com.eddy1.easyadventure.init;
 import com.eddy1.easyadventure.EasyAdventure;
 import com.eddy1.easyadventure.menu.CoreSizeMenu;
 import com.eddy1.easyadventure.menu.KeyPasswordMenu;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.world.inventory.MenuType;
-import net.neoforged.bus.api.IEventBus;
-import net.neoforged.neoforge.common.extensions.IMenuTypeExtension;
-import net.neoforged.neoforge.registries.DeferredHolder;
-import net.neoforged.neoforge.registries.DeferredRegister;
+import net.minecraftforge.common.extensions.IForgeMenuType;
+import net.minecraftforge.eventbus.api.IEventBus;
+import net.minecraftforge.registries.DeferredRegister;
+import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraftforge.registries.RegistryObject;
 
 public class ModMenuTypes {
     public static final DeferredRegister<MenuType<?>> MENUS =
-            DeferredRegister.create(Registries.MENU, EasyAdventure.MODID);
+            DeferredRegister.create(ForgeRegistries.MENU_TYPES, EasyAdventure.MODID);
 
-    public static final DeferredHolder<MenuType<?>, MenuType<CoreSizeMenu>> CORE_SIZE_MENU =
-            MENUS.register("core_size_menu", () -> IMenuTypeExtension.create(CoreSizeMenu::new));
+    public static final RegistryObject<MenuType<CoreSizeMenu>> CORE_SIZE_MENU =
+            MENUS.register("core_size_menu", () -> IForgeMenuType.create(CoreSizeMenu::new));
 
-    public static final DeferredHolder<MenuType<?>, MenuType<KeyPasswordMenu>> KEY_PASSWORD_MENU =
-            MENUS.register("key_password_menu", () -> IMenuTypeExtension.create(KeyPasswordMenu::new));
+    public static final RegistryObject<MenuType<KeyPasswordMenu>> KEY_PASSWORD_MENU =
+            MENUS.register("key_password_menu", () -> IForgeMenuType.create(KeyPasswordMenu::new));
 
     public static void register(IEventBus eventBus) {
         MENUS.register(eventBus);

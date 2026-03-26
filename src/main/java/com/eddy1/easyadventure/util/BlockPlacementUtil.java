@@ -38,7 +38,7 @@ public final class BlockPlacementUtil {
             return;
         }
 
-        blockEntity.loadWithComponents(tag, level.registryAccess());
+        blockEntity.load(tag);
         blockEntity.setChanged();
         BlockState state = level.getBlockState(pos);
         level.sendBlockUpdated(pos, state, state, Block.UPDATE_CLIENTS);

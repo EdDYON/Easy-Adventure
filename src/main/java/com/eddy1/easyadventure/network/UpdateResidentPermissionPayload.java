@@ -1,51 +1,43 @@
 package com.eddy1.easyadventure.network;
 
-import com.eddy1.easyadventure.EasyAdventure;
 import com.eddy1.easyadventure.block.BaseCoreBlockEntity;
 import com.eddy1.easyadventure.block.core.CorePermission;
 import net.minecraft.core.BlockPos;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
+import net.minecraftforge.network.NetworkEvent;
 
 import java.util.UUID;
+import java.util.function.Supplier;
 
 public record UpdateResidentPermissionPayload(
         BlockPos pos,
         UUID residentUuid,
         int permissionId,
         boolean enabled
-) implements CustomPacketPayload {
-    public static final Type<UpdateResidentPermissionPayload> TYPE =
-            new Type<>(ResourceLocation.fromNamespaceAndPath(EasyAdventure.MODID, "update_resident_permission"));
-
-    public static final StreamCodec<RegistryFriendlyByteBuf, UpdateResidentPermissionPayload> STREAM_CODEC = StreamCodec.of(
-            (buf, payload) -> {
-                BlockPos.STREAM_CODEC.encode(buf, payload.pos);
-                buf.writeUUID(payload.residentUuid);
-                buf.writeVarInt(payload.permissionId);
-                buf.writeBoolean(payload.enabled);
-            },
-            buf -> new UpdateResidentPermissionPayload(
-                    BlockPos.STREAM_CODEC.decode(buf),
-                    buf.readUUID(),
-                    buf.readVarInt(),
-                    buf.readBoolean()
-            )
-    );
-
-    @Override
-    public Type<? extends CustomPacketPayload> type() {
-        return TYPE;
+) {
+    public static void encode(UpdateResidentPermissionPayload payload, FriendlyByteBuf buf) {
+        buf.writeBlockPos(payload.pos);
+        buf.writeUUID(payload.residentUuid);
+        buf.writeVarInt(payload.permissionId);
+        buf.writeBoolean(payload.enabled);
     }
 
-    public static void handle(UpdateResidentPermissionPayload payload, IPayloadContext context) {
+    public static UpdateResidentPermissionPayload decode(FriendlyByteBuf buf) {
+        return new UpdateResidentPermissionPayload(
+                buf.readBlockPos(),
+                buf.readUUID(),
+                buf.readVarInt(),
+                buf.readBoolean()
+        );
+    }
+
+    public static void handle(UpdateResidentPermissionPayload payload, Supplier<NetworkEvent.Context> contextSupplier) {
+        NetworkEvent.Context context = contextSupplier.get();
         context.enqueueWork(() -> {
-            if (!(context.player() instanceof ServerPlayer serverPlayer)) {
+            ServerPlayer serverPlayer = context.getSender();
+            if (serverPlayer == null) {
                 return;
             }
 
@@ -62,5 +54,6 @@ public record UpdateResidentPermissionPayload(
                 core.updateResidentPermission(serverPlayer, payload.residentUuid(), CorePermission.fromId(payload.permissionId()), payload.enabled());
             }
         });
+        context.setPacketHandled(true);
     }
 }

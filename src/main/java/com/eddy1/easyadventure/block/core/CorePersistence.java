@@ -23,8 +23,7 @@ public final class CorePersistence {
             BaseCoreBlockEntity.State runtimeState,
             CoreTerrainTracker terrainTracker,
             CoreStructureWorkspace workspace,
-            NonNullList<ItemStack> upgradeFuelInventory,
-            net.minecraft.core.HolderLookup.Provider registries
+            NonNullList<ItemStack> upgradeFuelInventory
     ) {
         tag.putString("BaseName", state.baseName());
         tag.putUUID("CoreUUID", state.coreUUID());
@@ -58,7 +57,7 @@ public final class CorePersistence {
         CompoundTag workspaceTag = new CompoundTag();
         workspace.save(workspaceTag);
         tag.put("Workspace", workspaceTag);
-        ContainerHelper.saveAllItems(tag, upgradeFuelInventory, registries);
+        ContainerHelper.saveAllItems(tag, upgradeFuelInventory);
     }
 
     public static CoreStoredState loadStoredState(CompoundTag tag) {
@@ -123,7 +122,7 @@ public final class CorePersistence {
         }
     }
 
-    public static void loadTransientData(CompoundTag tag, CoreTerrainTracker terrainTracker, CoreStructureWorkspace workspace, NonNullList<ItemStack> upgradeFuelInventory, net.minecraft.core.HolderLookup.Provider registries) {
+    public static void loadTransientData(CompoundTag tag, CoreTerrainTracker terrainTracker, CoreStructureWorkspace workspace, NonNullList<ItemStack> upgradeFuelInventory) {
         if (tag.contains("OriginalTerrain")) {
             terrainTracker.load(tag.getList("OriginalTerrain", Tag.TAG_COMPOUND));
         }
@@ -139,15 +138,14 @@ public final class CorePersistence {
             for (int i = 0; i < upgradeFuelInventory.size(); i++) {
                 upgradeFuelInventory.set(i, ItemStack.EMPTY);
             }
-            ContainerHelper.loadAllItems(tag, upgradeFuelInventory, registries);
+            ContainerHelper.loadAllItems(tag, upgradeFuelInventory);
         }
     }
 
     public static void writeUpdateTag(
             CompoundTag tag,
             CoreStoredState state,
-            NonNullList<ItemStack> upgradeFuelInventory,
-            net.minecraft.core.HolderLookup.Provider registries
+            NonNullList<ItemStack> upgradeFuelInventory
     ) {
         tag.putString("BaseName", state.baseName());
         tag.putUUID("CoreUUID", state.coreUUID());
@@ -168,7 +166,7 @@ public final class CorePersistence {
         if (!state.upgradeFuelTicks().isEmpty()) {
             tag.put("UpgradeFuel", serializeUpgradeFuel(state.upgradeFuelTicks()));
         }
-        ContainerHelper.saveAllItems(tag, upgradeFuelInventory, registries);
+        ContainerHelper.saveAllItems(tag, upgradeFuelInventory);
     }
 
     private static ListTag serializeResidents(Map<UUID, CoreResident> residents) {

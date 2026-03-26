@@ -1,6 +1,5 @@
 package com.eddy1.easyadventure.world;
 
-import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -28,7 +27,8 @@ public class BuildingStorageData extends SavedData {
         }
 
         return overworld.getDataStorage().computeIfAbsent(
-                new SavedData.Factory<>(BuildingStorageData::new, BuildingStorageData::load, null),
+                BuildingStorageData::load,
+                BuildingStorageData::new,
                 DATA_NAME
         );
     }
@@ -84,7 +84,7 @@ public class BuildingStorageData extends SavedData {
         setDirty();
     }
 
-    public static BuildingStorageData load(CompoundTag nbt, HolderLookup.Provider provider) {
+    public static BuildingStorageData load(CompoundTag nbt) {
         BuildingStorageData data = new BuildingStorageData();
         loadActiveBuildings(nbt, data);
         loadLocks(nbt, data);
@@ -124,7 +124,7 @@ public class BuildingStorageData extends SavedData {
     }
 
     @Override
-    public CompoundTag save(CompoundTag nbt, HolderLookup.Provider provider) {
+    public CompoundTag save(CompoundTag nbt) {
         ListTag activeList = new ListTag();
         buildingMap.forEach((uuid, compound) -> {
             CompoundTag entry = new CompoundTag();

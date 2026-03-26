@@ -631,23 +631,23 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
     }
 
     @Override
-    protected void saveAdditional(CompoundTag tag, net.minecraft.core.HolderLookup.Provider registries) {
-        super.saveAdditional(tag, registries);
-        CorePersistence.save(tag, storedState, runtime.state(), terrainTracker, workspace, upgradeFuelInventory, registries);
+    protected void saveAdditional(CompoundTag tag) {
+        super.saveAdditional(tag);
+        CorePersistence.save(tag, storedState, runtime.state(), terrainTracker, workspace, upgradeFuelInventory);
     }
 
     @Override
-    protected void loadAdditional(CompoundTag tag, net.minecraft.core.HolderLookup.Provider registries) {
-        super.loadAdditional(tag, registries);
+    public void load(CompoundTag tag) {
+        super.load(tag);
         applyStoredState(CorePersistence.loadStoredState(tag));
-        CorePersistence.loadTransientData(tag, terrainTracker, workspace, upgradeFuelInventory, registries);
+        CorePersistence.loadTransientData(tag, terrainTracker, workspace, upgradeFuelInventory);
         persistedRuntimeState = CorePersistence.loadRuntimeState(tag);
     }
 
     @Override
-    public CompoundTag getUpdateTag(net.minecraft.core.HolderLookup.Provider registries) {
-        CompoundTag tag = super.getUpdateTag(registries);
-        CorePersistence.writeUpdateTag(tag, storedState, upgradeFuelInventory, registries);
+    public CompoundTag getUpdateTag() {
+        CompoundTag tag = super.getUpdateTag();
+        CorePersistence.writeUpdateTag(tag, storedState, upgradeFuelInventory);
         return tag;
     }
 

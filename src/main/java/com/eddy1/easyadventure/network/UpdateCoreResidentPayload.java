@@ -1,45 +1,38 @@
 package com.eddy1.easyadventure.network;
 
-import com.eddy1.easyadventure.EasyAdventure;
 import com.eddy1.easyadventure.block.BaseCoreBlockEntity;
 import net.minecraft.core.BlockPos;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
+import net.minecraftforge.network.NetworkEvent;
+
+import java.util.function.Supplier;
 
 public record UpdateCoreResidentPayload(
         BlockPos pos,
         BaseCoreBlockEntity.ResidentAction action,
         String residentValue
-) implements CustomPacketPayload {
-    public static final Type<UpdateCoreResidentPayload> TYPE =
-            new Type<>(ResourceLocation.fromNamespaceAndPath(EasyAdventure.MODID, "update_core_resident"));
-
-    public static final StreamCodec<RegistryFriendlyByteBuf, UpdateCoreResidentPayload> STREAM_CODEC = StreamCodec.of(
-            (buf, payload) -> {
-                BlockPos.STREAM_CODEC.encode(buf, payload.pos);
-                buf.writeVarInt(payload.action.ordinal());
-                buf.writeUtf(payload.residentValue, 64);
-            },
-            buf -> new UpdateCoreResidentPayload(
-                    BlockPos.STREAM_CODEC.decode(buf),
-                    BaseCoreBlockEntity.ResidentAction.fromId(buf.readVarInt()),
-                    buf.readUtf(64)
-            )
-    );
-
-    @Override
-    public Type<? extends CustomPacketPayload> type() {
-        return TYPE;
+) {
+    public static void encode(UpdateCoreResidentPayload payload, FriendlyByteBuf buf) {
+        buf.writeBlockPos(payload.pos);
+        buf.writeVarInt(payload.action.ordinal());
+        buf.writeUtf(payload.residentValue, 64);
     }
 
-    public static void handle(UpdateCoreResidentPayload payload, IPayloadContext context) {
+    public static UpdateCoreResidentPayload decode(FriendlyByteBuf buf) {
+        return new UpdateCoreResidentPayload(
+                buf.readBlockPos(),
+                BaseCoreBlockEntity.ResidentAction.fromId(buf.readVarInt()),
+                buf.readUtf(64)
+        );
+    }
+
+    public static void handle(UpdateCoreResidentPayload payload, Supplier<NetworkEvent.Context> contextSupplier) {
+        NetworkEvent.Context context = contextSupplier.get();
         context.enqueueWork(() -> {
-            if (!(context.player() instanceof ServerPlayer serverPlayer)) {
+            ServerPlayer serverPlayer = context.getSender();
+            if (serverPlayer == null) {
                 return;
             }
 
@@ -56,5 +49,6 @@ public record UpdateCoreResidentPayload(
                 core.updateResident(serverPlayer, payload.action(), payload.residentValue());
             }
         });
+        context.setPacketHandled(true);
     }
 }

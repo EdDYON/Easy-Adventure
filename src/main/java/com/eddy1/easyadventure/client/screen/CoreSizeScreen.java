@@ -6,6 +6,7 @@ import com.eddy1.easyadventure.block.core.CorePermission;
 import com.eddy1.easyadventure.block.core.CoreResident;
 import com.eddy1.easyadventure.block.core.CoreUpgrade;
 import com.eddy1.easyadventure.menu.CoreSizeMenu;
+import com.eddy1.easyadventure.network.EasyAdventureNetwork;
 import com.eddy1.easyadventure.network.UpdateCoreResidentPayload;
 import com.eddy1.easyadventure.network.UpdateCoreSizePayload;
 import com.eddy1.easyadventure.network.UpdateResidentPermissionPayload;
@@ -19,7 +20,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
-import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -236,7 +236,7 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
 
     @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        renderBackground(guiGraphics, mouseX, mouseY, partialTick);
+        renderBackground(guiGraphics);
         refreshDynamicState();
         super.render(guiGraphics, mouseX, mouseY, partialTick);
         renderPage(guiGraphics);
@@ -415,7 +415,7 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
             selectedCandidateUuid = null;
         }
         if (selectedCandidateUuid == null && !candidates.isEmpty()) {
-            selectedCandidateUuid = candidates.getFirst().uuid();
+            selectedCandidateUuid = candidates.get(0).uuid();
         }
 
         for (int i = 0; i < residentButtons.length; i++) {
@@ -636,7 +636,7 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
         int newX = clamp(parseValue(xEdit, 9), BaseCoreBlockEntity.MIN_SIZE_XZ, BaseCoreBlockEntity.MAX_SIZE_XZ);
         int newY = clamp(parseValue(yEdit, 5), BaseCoreBlockEntity.MIN_SIZE_Y, BaseCoreBlockEntity.MAX_SIZE_Y);
         int newZ = clamp(parseValue(zEdit, 9), BaseCoreBlockEntity.MIN_SIZE_XZ, BaseCoreBlockEntity.MAX_SIZE_XZ);
-        PacketDistributor.sendToServer(new UpdateCoreSizePayload(menu.getPos(), newX, newY, newZ, passwordEnabled, passwordEdit.getValue()));
+        EasyAdventureNetwork.sendToServer(new UpdateCoreSizePayload(menu.getPos(), newX, newY, newZ, passwordEnabled, passwordEdit.getValue()));
         onClose();
     }
 
@@ -645,14 +645,14 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
         if (candidate == null) {
             return;
         }
-        PacketDistributor.sendToServer(new UpdateCoreResidentPayload(menu.getPos(), BaseCoreBlockEntity.ResidentAction.ADD, candidate.name()));
+        EasyAdventureNetwork.sendToServer(new UpdateCoreResidentPayload(menu.getPos(), BaseCoreBlockEntity.ResidentAction.ADD, candidate.name()));
     }
 
     private void removeResident() {
         if (selectedResidentUuid == null) {
             return;
         }
-        PacketDistributor.sendToServer(new UpdateCoreResidentPayload(menu.getPos(), BaseCoreBlockEntity.ResidentAction.REMOVE, selectedResidentUuid.toString()));
+        EasyAdventureNetwork.sendToServer(new UpdateCoreResidentPayload(menu.getPos(), BaseCoreBlockEntity.ResidentAction.REMOVE, selectedResidentUuid.toString()));
         selectedResidentUuid = null;
     }
 
@@ -702,7 +702,7 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
             return;
         }
 
-        PacketDistributor.sendToServer(new UpdateResidentPermissionPayload(
+        EasyAdventureNetwork.sendToServer(new UpdateResidentPermissionPayload(
                 menu.getPos(),
                 resident.uuid(),
                 permission.ordinal(),

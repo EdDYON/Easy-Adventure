@@ -2,9 +2,9 @@ package com.eddy1.easyadventure.block.core;
 
 import it.unimi.dsi.fastutil.ints.IntList;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Holder;
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetTitlesAnimationPacket;
@@ -19,8 +19,6 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.FireworkRocketEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.item.component.FireworkExplosion;
-import net.minecraft.world.item.component.Fireworks;
 import net.minecraft.world.level.Level;
 
 import java.util.ArrayList;
@@ -64,14 +62,15 @@ public final class CoreEffects {
 
         if (level instanceof ServerLevel serverLevel) {
             ItemStack rocket = new ItemStack(Items.FIREWORK_ROCKET);
-            FireworkExplosion explosion = new FireworkExplosion(
-                    FireworkExplosion.Shape.LARGE_BALL,
-                    IntList.of(0xFF5A36, 0xFFD166, 0xF8F9FA),
-                    IntList.of(),
-                    true,
-                    false
-            );
-            rocket.set(DataComponents.FIREWORKS, new Fireworks(1, List.of(explosion)));
+            CompoundTag fireworksTag = rocket.getOrCreateTagElement("Fireworks");
+            fireworksTag.putByte("Flight", (byte) 1);
+            CompoundTag explosionTag = new CompoundTag();
+            explosionTag.putByte("Type", (byte) 1);
+            explosionTag.putIntArray("Colors", IntList.of(0xFF5A36, 0xFFD166, 0xF8F9FA).toIntArray());
+            explosionTag.putBoolean("Flicker", true);
+            ListTag explosions = new ListTag();
+            explosions.add(explosionTag);
+            fireworksTag.put("Explosions", explosions);
             level.addFreshEntity(new FireworkRocketEntity(level, pos.getX() + 0.5, pos.getY() + 2.5, pos.getZ() + 0.5, rocket));
 
             for (int i = 0; i < 20; i++) {
@@ -88,7 +87,7 @@ public final class CoreEffects {
         }
 
         Random random = new Random(System.nanoTime());
-        List<Holder<MobEffect>> possibleEffects = new ArrayList<>(List.of(
+        List<MobEffect> possibleEffects = new ArrayList<>(List.of(
                 MobEffects.MOVEMENT_SPEED,
                 MobEffects.DIG_SPEED,
                 MobEffects.DAMAGE_RESISTANCE,
