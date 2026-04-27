@@ -24,11 +24,14 @@ public final class CoreEntityTransport {
     }
 
     public static void capture(Level level, BlockPos center, CoreVolume volume, List<CompoundTag> output) {
+        capture(level, volume.createAabb(center), center, output);
+    }
+
+    public static void capture(Level level, AABB area, BlockPos anchor, List<CompoundTag> output) {
         if (level.isClientSide) {
             return;
         }
 
-        AABB area = volume.createAabb(center);
         List<Entity> entities = level.getEntitiesOfClass(Entity.class, area, capturableEntityPredicate());
 
         for (Entity entity : entities) {
@@ -37,7 +40,7 @@ public final class CoreEntityTransport {
                 continue;
             }
 
-            Vec3 relativePos = entity.position().subtract(center.getX(), center.getY(), center.getZ());
+            Vec3 relativePos = entity.position().subtract(anchor.getX(), anchor.getY(), anchor.getZ());
             entityTag.putDouble("RelX", relativePos.x);
             entityTag.putDouble("RelY", relativePos.y);
             entityTag.putDouble("RelZ", relativePos.z);
@@ -65,7 +68,11 @@ public final class CoreEntityTransport {
     }
 
     public static int countCapturable(Level level, BlockPos center, CoreVolume volume) {
-        return level.getEntitiesOfClass(Entity.class, volume.createAabb(center), capturableEntityPredicate()).size();
+        return countCapturable(level, volume.createAabb(center));
+    }
+
+    public static int countCapturable(Level level, AABB area) {
+        return level.getEntitiesOfClass(Entity.class, area, capturableEntityPredicate()).size();
     }
 
     private static Predicate<Entity> capturableEntityPredicate() {

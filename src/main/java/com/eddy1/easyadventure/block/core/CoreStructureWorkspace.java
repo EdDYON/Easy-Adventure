@@ -52,11 +52,11 @@ public final class CoreStructureWorkspace {
     }
 
     public StructureSnapshot createPackedSnapshot(CoreVolume volume) {
-        return new StructureSnapshot(volume.sizeX(), volume.sizeY(), volume.sizeZ(), new ArrayList<>(packedBlocks.values()), packedEntities);
+        return new StructureSnapshot(volume.sizeX(), volume.sizeY(), volume.sizeBelowY(), volume.sizeZ(), new ArrayList<>(packedBlocks.values()), packedEntities);
     }
 
     public StructureSnapshot createPackedSnapshot(CoreVolume volume, @Nullable String packedAt, @Nullable String sourceDimension) {
-        return new StructureSnapshot(volume.sizeX(), volume.sizeY(), volume.sizeZ(), new ArrayList<>(packedBlocks.values()), packedEntities, packedAt, sourceDimension);
+        return new StructureSnapshot(volume.sizeX(), volume.sizeY(), volume.sizeBelowY(), volume.sizeZ(), new ArrayList<>(packedBlocks.values()), packedEntities, packedAt, sourceDimension);
     }
 
     public void rememberPackedBlock(SavedBlockInfo info) {

@@ -20,6 +20,7 @@ public final class ModCreativeTabs {
                     .displayItems((parameters, output) -> {
                         output.accept(ModItems.BASE_KEY_ITEM.get());
                         output.accept(ModItems.BASE_CORE_ITEM.get());
+                        output.accept(ModItems.KEY_RECALL_TABLE_ITEM.get());
                     })
                     .build());
 

@@ -1,6 +1,7 @@
 package com.eddy1.easyadventure.network;
 
 import com.eddy1.easyadventure.block.BaseCoreBlockEntity;
+import com.eddy1.easyadventure.block.core.CoreClearMode;
 import com.eddy1.easyadventure.block.core.CorePasswordUtil;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
@@ -14,7 +15,10 @@ public record UpdateCoreSizePayload(
         BlockPos pos,
         int sizeX,
         int sizeY,
+        int sizeBelowY,
         int sizeZ,
+        String baseName,
+        CoreClearMode clearMode,
         boolean passwordEnabled,
         String password
 ) {
@@ -22,7 +26,10 @@ public record UpdateCoreSizePayload(
         buf.writeBlockPos(payload.pos);
         buf.writeInt(payload.sizeX);
         buf.writeInt(payload.sizeY);
+        buf.writeInt(payload.sizeBelowY);
         buf.writeInt(payload.sizeZ);
+        buf.writeUtf(payload.baseName, 64);
+        buf.writeEnum(payload.clearMode);
         buf.writeBoolean(payload.passwordEnabled);
         buf.writeUtf(payload.password, CorePasswordUtil.MAX_PASSWORD_LENGTH);
     }
@@ -33,6 +40,9 @@ public record UpdateCoreSizePayload(
                 buf.readInt(),
                 buf.readInt(),
                 buf.readInt(),
+                buf.readInt(),
+                buf.readUtf(64),
+                buf.readEnum(CoreClearMode.class),
                 buf.readBoolean(),
                 buf.readUtf(CorePasswordUtil.MAX_PASSWORD_LENGTH)
         );
@@ -60,7 +70,10 @@ public record UpdateCoreSizePayload(
                         serverPlayer,
                         payload.sizeX(),
                         payload.sizeY(),
+                        payload.sizeBelowY(),
                         payload.sizeZ(),
+                        payload.baseName(),
+                        payload.clearMode(),
                         payload.passwordEnabled(),
                         payload.password()
                 );

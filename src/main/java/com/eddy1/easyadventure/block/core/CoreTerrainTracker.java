@@ -36,7 +36,7 @@ public final class CoreTerrainTracker {
         if (level.getBlockEntity(pos) != null) {
             level.removeBlockEntity(pos);
         }
-        BlockPlacementUtil.placeForRestore(level, pos, restoreState);
+        BlockPlacementUtil.placeForTerrainRestore(level, pos, restoreState);
         BlockPlacementUtil.loadBlockEntity(level, pos, restoreNbt);
         BlockPlacementUtil.refreshNeighbors(level, pos);
     }

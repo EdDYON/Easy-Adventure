@@ -2,6 +2,7 @@ package com.eddy1.easyadventure.util;
 
 import com.eddy1.easyadventure.block.core.CoreResident;
 import com.eddy1.easyadventure.block.core.CoreUpgrade;
+import com.eddy1.easyadventure.block.core.CoreClearMode;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -22,11 +23,15 @@ public final class KeyDataUtil {
     public static final String OWNER_UUID = "OwnerUUID";
     public static final String OWNER_NAME = "OwnerName";
     public static final String BASE_NAME = "BaseName";
+    public static final String KEY_UUID = "KeyUUID";
+    public static final String OBSOLETE_KEY = "ObsoleteKey";
     public static final String PASSWORD_ENABLED = "PasswordEnabled";
     public static final String PASSWORD_HASH = "PasswordHash";
     public static final String SIZE_X = "StoredSizeX";
     public static final String SIZE_Y = "StoredSizeY";
+    public static final String SIZE_BELOW_Y = "StoredSizeBelowY";
     public static final String SIZE_Z = "StoredSizeZ";
+    public static final String CLEAR_MODE = "ClearMode";
     public static final String RESIDENTS = "Residents";
     public static final String COLLABORATORS = "Collaborators";
     public static final String UPGRADE_FUEL = "UpgradeFuel";
@@ -60,6 +65,50 @@ public final class KeyDataUtil {
         return tag != null && tag.contains(STORAGE_UUID) ? tag.getUUID(STORAGE_UUID) : null;
     }
 
+    public static @Nullable UUID getKeyUuid(ItemStack stack) {
+        CompoundTag tag = getTag(stack);
+        return tag != null && tag.contains(KEY_UUID) ? tag.getUUID(KEY_UUID) : null;
+    }
+
+    public static UUID ensureKeyUuid(ItemStack stack) {
+        UUID keyUuid = getKeyUuid(stack);
+        if (keyUuid == null) {
+            keyUuid = UUID.randomUUID();
+            getOrCreateTag(stack).putUUID(KEY_UUID, keyUuid);
+        }
+        return keyUuid;
+    }
+
+    public static void setKeyUuid(ItemStack stack, @Nullable UUID keyUuid) {
+        CompoundTag tag = getOrCreateTag(stack);
+        if (keyUuid == null) {
+            tag.remove(KEY_UUID);
+        } else {
+            tag.putUUID(KEY_UUID, keyUuid);
+        }
+    }
+
+    public static boolean isObsoleteKey(ItemStack stack) {
+        CompoundTag tag = getTag(stack);
+        return tag != null && tag.getBoolean(OBSOLETE_KEY);
+    }
+
+    public static void setObsoleteKey(ItemStack stack, boolean obsolete) {
+        CompoundTag tag = stack.getTag();
+        if (!obsolete) {
+            if (tag == null) {
+                return;
+            }
+            tag.remove(OBSOLETE_KEY);
+            if (tag.isEmpty()) {
+                stack.setTag(null);
+            }
+            return;
+        }
+
+        getOrCreateTag(stack).putBoolean(OBSOLETE_KEY, true);
+    }
+
     public static @Nullable UUID getOwnerUuid(ItemStack stack) {
         CompoundTag tag = getTag(stack);
         return tag != null && tag.contains(OWNER_UUID) ? tag.getUUID(OWNER_UUID) : null;
@@ -73,6 +122,23 @@ public final class KeyDataUtil {
     public static @Nullable String getBaseName(ItemStack stack) {
         CompoundTag tag = getTag(stack);
         return tag != null && tag.contains(BASE_NAME) ? tag.getString(BASE_NAME) : null;
+    }
+
+    public static void setBaseName(ItemStack stack, @Nullable String baseName) {
+        CompoundTag tag = stack.getTag();
+        String normalized = baseName == null ? "" : baseName.trim();
+        if (normalized.isEmpty()) {
+            if (tag == null) {
+                return;
+            }
+            tag.remove(BASE_NAME);
+            if (tag.isEmpty()) {
+                stack.setTag(null);
+            }
+            return;
+        }
+
+        getOrCreateTag(stack).putString(BASE_NAME, normalized);
     }
 
     public static boolean isPasswordEnabled(ItemStack stack) {
@@ -95,9 +161,22 @@ public final class KeyDataUtil {
         return tag != null && tag.contains(SIZE_Y) ? tag.getInt(SIZE_Y) : 0;
     }
 
+    public static int getStoredSizeBelowY(ItemStack stack) {
+        CompoundTag tag = getTag(stack);
+        return tag != null && tag.contains(SIZE_BELOW_Y) ? tag.getInt(SIZE_BELOW_Y) : 0;
+    }
+
     public static int getStoredSizeZ(ItemStack stack) {
         CompoundTag tag = getTag(stack);
         return tag != null && tag.contains(SIZE_Z) ? tag.getInt(SIZE_Z) : 0;
+    }
+
+    public static CoreClearMode getClearMode(ItemStack stack) {
+        CompoundTag tag = getTag(stack);
+        if (tag == null || !tag.contains(CLEAR_MODE)) {
+            return CoreClearMode.CLEAR;
+        }
+        return CoreClearMode.fromName(tag.getString(CLEAR_MODE));
     }
 
     public static Map<UUID, CoreResident> getResidents(ItemStack stack) {
@@ -196,7 +275,9 @@ public final class KeyDataUtil {
             @Nullable String passwordHash,
             int sizeX,
             int sizeY,
+            int sizeBelowY,
             int sizeZ,
+            CoreClearMode clearMode,
             Map<UUID, CoreResident> residents,
             Map<CoreUpgrade, Integer> upgradeFuelTicks,
             Map<CoreUpgrade, Integer> queuedUpgradeFuelCounts
@@ -207,12 +288,16 @@ public final class KeyDataUtil {
             tag.putUUID(STORAGE_UUID, storageUuid);
             tag.putInt(SIZE_X, sizeX);
             tag.putInt(SIZE_Y, sizeY);
+            tag.putInt(SIZE_BELOW_Y, sizeBelowY);
             tag.putInt(SIZE_Z, sizeZ);
+            tag.putString(CLEAR_MODE, clearMode.name());
         } else {
             tag.remove(STORAGE_UUID);
             tag.remove(SIZE_X);
             tag.remove(SIZE_Y);
+            tag.remove(SIZE_BELOW_Y);
             tag.remove(SIZE_Z);
+            tag.remove(CLEAR_MODE);
             tag.remove(PACKED_AT);
             tag.remove(SOURCE_DIMENSION);
             tag.remove(BLOCK_COUNT);
@@ -236,6 +321,7 @@ public final class KeyDataUtil {
         } else {
             tag.remove(PASSWORD_HASH);
         }
+        tag.remove(OBSOLETE_KEY);
         writeResidents(tag, residents);
         writeUpgradeFuel(tag, upgradeFuelTicks);
         writeUpgradeFuelCounts(tag, queuedUpgradeFuelCounts);
@@ -244,8 +330,10 @@ public final class KeyDataUtil {
     public static void setStoredStructureReference(
             ItemStack stack,
             UUID storageUuid,
+            @Nullable String baseName,
             int sizeX,
             int sizeY,
+            int sizeBelowY,
             int sizeZ,
             @Nullable String packedAt,
             @Nullable String sourceDimension,
@@ -255,8 +343,10 @@ public final class KeyDataUtil {
     ) {
         CompoundTag tag = getOrCreateTag(stack);
         tag.putUUID(STORAGE_UUID, storageUuid);
+        setOptionalString(tag, BASE_NAME, baseName);
         tag.putInt(SIZE_X, sizeX);
         tag.putInt(SIZE_Y, sizeY);
+        tag.putInt(SIZE_BELOW_Y, sizeBelowY);
         tag.putInt(SIZE_Z, sizeZ);
         setOptionalString(tag, PACKED_AT, packedAt);
         setOptionalString(tag, SOURCE_DIMENSION, sourceDimension);
@@ -278,6 +368,7 @@ public final class KeyDataUtil {
         tag.remove(STORAGE_UUID);
         tag.remove(SIZE_X);
         tag.remove(SIZE_Y);
+        tag.remove(SIZE_BELOW_Y);
         tag.remove(SIZE_Z);
         tag.remove(PACKED_AT);
         tag.remove(SOURCE_DIMENSION);

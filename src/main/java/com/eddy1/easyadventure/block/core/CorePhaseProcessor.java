@@ -27,6 +27,7 @@ public final class CorePhaseProcessor {
             CoreVolume volume,
             CoreTerrainTracker terrainTracker,
             BlockPos pos,
+            CoreClearMode clearMode,
             Function<BlockPos, @Nullable CompoundTag> captureBlockEntityData
     ) {
         int relativeY = pos.getY() - center.getY();
@@ -42,12 +43,17 @@ public final class CorePhaseProcessor {
 
         if (relativeY == 0) {
             terrainTracker.remember(center, pos, state, captureBlockEntityData.apply(pos));
-            if (!state.is(Blocks.COBBLESTONE)) {
-                BlockPlacementUtil.replaceForCapture(level, pos, Blocks.COBBLESTONE.defaultBlockState());
+            BlockState foundationState = foundationStateFor(center, volume, pos);
+            if (!state.equals(foundationState)) {
+                BlockPlacementUtil.replaceForCapture(level, pos, foundationState);
                 if (level instanceof ServerLevel serverLevel) {
                     serverLevel.sendParticles(ParticleTypes.HAPPY_VILLAGER, pos.getX() + 0.5, pos.getY() + 1.0, pos.getZ() + 0.5, 1, 0, 0, 0, 0);
                 }
             }
+            return;
+        }
+
+        if (clearMode == CoreClearMode.KEEP) {
             return;
         }
 
@@ -62,8 +68,13 @@ public final class CorePhaseProcessor {
             BlockPos center,
             CoreTerrainTracker terrainTracker,
             BlockPos pos,
+            CoreClearMode clearMode,
             Function<BlockPos, @Nullable CompoundTag> captureBlockEntityData
     ) {
+        if (clearMode == CoreClearMode.KEEP) {
+            return;
+        }
+
         BlockState state = level.getBlockState(pos);
         if (state.getDestroySpeed(level, pos) < 0 || state.isAir()) {
             return;
@@ -85,8 +96,13 @@ public final class CorePhaseProcessor {
             Function<BlockPos, @Nullable CompoundTag> captureBlockEntityData
     ) {
         BlockState state = level.getBlockState(pos);
+        if (CoreCompat.isIgnoredDuringPack(state)) {
+            BlockPlacementUtil.clearForCapture(level, pos);
+            return;
+        }
         if (state.isAir()
                 || state.getBlock() instanceof BaseCoreBlock
+                || CoreCompat.isDangerousToPack(state, level.getBlockEntity(pos))
                 || state.is(CoreCompat.CANNOT_PACK)
                 || state.getDestroySpeed(level, pos) < 0) {
             return;
@@ -129,5 +145,26 @@ public final class CorePhaseProcessor {
         BlockPos relativePos = targetPos.subtract(center);
         CompoundTag tag = workspace.removePendingBlockEntityLoad(relativePos);
         BlockPlacementUtil.loadBlockEntity(level, targetPos, tag);
+    }
+
+    private static BlockState foundationStateFor(BlockPos center, CoreVolume volume, BlockPos pos) {
+        int relativeX = pos.getX() - center.getX();
+        int relativeZ = pos.getZ() - center.getZ();
+        boolean edge = Math.abs(relativeX) == volume.halfX() || Math.abs(relativeZ) == volume.halfZ();
+        int roll = Math.floorMod(relativeX * 31 + relativeZ * 17, 16);
+
+        if (edge) {
+            return roll % 5 == 0 ? Blocks.STONE_BRICKS.defaultBlockState() : Blocks.COBBLESTONE.defaultBlockState();
+        }
+        if (roll < 7) {
+            return Blocks.COBBLESTONE.defaultBlockState();
+        }
+        if (roll < 11) {
+            return Blocks.STONE.defaultBlockState();
+        }
+        if (roll < 14) {
+            return Blocks.ANDESITE.defaultBlockState();
+        }
+        return Blocks.STONE_BRICKS.defaultBlockState();
     }
 }

@@ -16,6 +16,16 @@ public final class ModItems {
             () -> new BlockItem(ModBlocks.BASE_CORE.get(), new Item.Properties())
     );
 
+    public static final RegistryObject<BlockItem> KEY_RECALL_TABLE_ITEM = ITEMS.register(
+            "key_recall_table",
+            () -> new BlockItem(ModBlocks.KEY_RECALL_TABLE.get(), new Item.Properties())
+    );
+
+    public static final RegistryObject<Item> BLANK_BASE_SCROLL_ITEM = ITEMS.register(
+            "blank_base_scroll",
+            () -> new Item(new Item.Properties().stacksTo(64))
+    );
+
     public static final RegistryObject<BaseKeyItem> BASE_KEY_ITEM = ITEMS.register(
             "base_key",
             () -> new BaseKeyItem(new Item.Properties().stacksTo(1))

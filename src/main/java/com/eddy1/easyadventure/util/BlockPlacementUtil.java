@@ -11,7 +11,8 @@ import org.jetbrains.annotations.Nullable;
 
 public final class BlockPlacementUtil {
     public static final int CAPTURE_FLAGS = Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE;
-    public static final int RESTORE_FLAGS = Block.UPDATE_ALL;
+    public static final int RESTORE_FLAGS = Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE;
+    public static final int TERRAIN_RESTORE_FLAGS = Block.UPDATE_ALL;
 
     private BlockPlacementUtil() {
     }
@@ -28,6 +29,10 @@ public final class BlockPlacementUtil {
         level.setBlock(pos, state, RESTORE_FLAGS);
     }
 
+    public static void placeForTerrainRestore(Level level, BlockPos pos, BlockState state) {
+        level.setBlock(pos, state, TERRAIN_RESTORE_FLAGS);
+    }
+
     public static void loadBlockEntity(Level level, BlockPos pos, @Nullable CompoundTag tag) {
         if (tag == null) {
             return;
@@ -38,7 +43,11 @@ public final class BlockPlacementUtil {
             return;
         }
 
-        blockEntity.load(tag);
+        CompoundTag relocated = tag.copy();
+        relocated.putInt("x", pos.getX());
+        relocated.putInt("y", pos.getY());
+        relocated.putInt("z", pos.getZ());
+        blockEntity.load(relocated);
         blockEntity.setChanged();
         BlockState state = level.getBlockState(pos);
         level.sendBlockUpdated(pos, state, state, Block.UPDATE_CLIENTS);

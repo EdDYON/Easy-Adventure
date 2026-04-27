@@ -3,6 +3,7 @@ package com.eddy1.easyadventure.block.core;
 import com.eddy1.easyadventure.init.ModItems;
 import com.eddy1.easyadventure.storage.StructureSnapshot;
 import com.eddy1.easyadventure.util.KeyDataUtil;
+import com.eddy1.easyadventure.world.BaseRegistryData;
 import com.eddy1.easyadventure.world.BuildingStorageData;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
@@ -51,12 +52,15 @@ public final class CorePackager {
             boolean passwordEnabled,
             @Nullable String passwordHash,
             CoreVolume volume,
+            CoreClearMode clearMode,
             Map<UUID, CoreResident> residents,
             Map<CoreUpgrade, Integer> upgradeFuelTicks,
             Map<CoreUpgrade, Integer> queuedUpgradeFuelCounts,
-            StructureSnapshot snapshot
+            StructureSnapshot snapshot,
+            UUID keyUuid
     ) {
         ItemStack keyStack = new ItemStack(ModItems.BASE_KEY_ITEM.get());
+        KeyDataUtil.setKeyUuid(keyStack, keyUuid);
         KeyDataUtil.setKeyData(
                 keyStack,
                 coreUuid,
@@ -68,7 +72,9 @@ public final class CorePackager {
                 passwordHash,
                 volume.sizeX(),
                 volume.sizeY(),
+                volume.sizeBelowY(),
                 volume.sizeZ(),
+                clearMode,
                 residents,
                 upgradeFuelTicks,
                 queuedUpgradeFuelCounts
@@ -76,8 +82,10 @@ public final class CorePackager {
         KeyDataUtil.setStoredStructureReference(
                 keyStack,
                 storageUuid,
+                baseName,
                 snapshot.sizeX(),
                 snapshot.sizeY(),
+                snapshot.sizeBelowY(),
                 snapshot.sizeZ(),
                 snapshot.packedAt(),
                 snapshot.sourceDimension(),
@@ -100,7 +108,10 @@ public final class CorePackager {
         }
 
         if (!given) {
-            ItemEntity itemEntity = new ItemEntity(level, origin.getX() + 0.5, origin.getY() + 1.2, origin.getZ() + 0.5, stack);
+            double dropX = targetPlayer == null ? origin.getX() + 0.5 : targetPlayer.getX();
+            double dropY = targetPlayer == null ? origin.getY() + 1.2 : targetPlayer.getY() + 0.5;
+            double dropZ = targetPlayer == null ? origin.getZ() + 0.5 : targetPlayer.getZ();
+            ItemEntity itemEntity = new ItemEntity(level, dropX, dropY, dropZ, stack);
             itemEntity.setDeltaMovement(0, 0.4, 0);
             itemEntity.setNoPickUpDelay();
             level.addFreshEntity(itemEntity);
@@ -122,6 +133,7 @@ public final class CorePackager {
             @Nullable String passwordHash,
             CoreStructureWorkspace workspace,
             CoreVolume volume,
+            CoreClearMode clearMode,
             Map<UUID, CoreResident> residents,
             Map<CoreUpgrade, Integer> upgradeFuelTicks,
             Map<CoreUpgrade, Integer> queuedUpgradeFuelCounts
@@ -133,10 +145,24 @@ public final class CorePackager {
                     serverLevel.dimension().location().toString()
             );
             UUID storageUUID = storePackedSnapshot(BuildingStorageData.get(serverLevel), coreUuid, snapshot);
+            UUID keyUuid = UUID.randomUUID();
+            ItemStack packedKey = createPackedKey(baseName, coreUuid, storageUUID, ownerUuid, ownerName, passwordEnabled, passwordHash, volume, clearMode, residents, upgradeFuelTicks, queuedUpgradeFuelCounts, snapshot, keyUuid);
+            if (ownerUuid != null) {
+                BaseRegistryData.get(serverLevel).registerPacked(
+                        coreUuid,
+                        ownerUuid,
+                        ownerName == null ? "" : ownerName,
+                        baseName,
+                        keyUuid,
+                        storageUUID,
+                        serverLevel.dimension().location().toString(),
+                        packedKey
+                );
+            }
             giveOrDropPackedKey(
                 level,
                 origin,
-                    createPackedKey(baseName, coreUuid, storageUUID, ownerUuid, ownerName, passwordEnabled, passwordHash, volume, residents, upgradeFuelTicks, queuedUpgradeFuelCounts, snapshot),
+                    packedKey,
                     ownerUuid
             );
         }

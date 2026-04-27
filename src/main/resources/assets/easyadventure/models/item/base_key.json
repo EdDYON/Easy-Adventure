@@ -6,9 +6,22 @@
   "overrides": [
     {
       "predicate": {
+        "easyadventure:obsolete": 1
+      },
+      "model": "easyadventure:item/base_key_obsolete"
+    },
+    {
+      "predicate": {
         "easyadventure:has_data": 1
       },
       "model": "easyadventure:item/base_key_full"
+    },
+    {
+      "predicate": {
+        "easyadventure:has_data": 1,
+        "easyadventure:obsolete": 1
+      },
+      "model": "easyadventure:item/base_key_obsolete_full"
     }
   ]
 }

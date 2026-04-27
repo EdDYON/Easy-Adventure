@@ -2,10 +2,12 @@ package com.eddy1.easyadventure.block;
 
 import com.eddy1.easyadventure.init.ModBlockEntities;
 import com.eddy1.easyadventure.init.ModItems;
+import com.eddy1.easyadventure.menu.BaseNameMenu;
 import com.eddy1.easyadventure.menu.CoreSizeMenu;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -92,14 +94,20 @@ public class BaseCoreBlock extends BaseEntityBlock {
             return;
         }
 
-        if (placer instanceof Player player) {
+        boolean named = false;
+        Player placingPlayer = placer instanceof Player player ? player : null;
+        if (placingPlayer != null) {
+            Player player = placingPlayer;
             core.setOwnerFromPlayer(player);
-        }
-        if (stack.hasCustomHoverName()) {
-            core.setBaseName(stack.getHoverName().getString());
+            if (stack.hasCustomHoverName() && level instanceof ServerLevel serverLevel) {
+                named = trySetRegisteredName(serverLevel, pos, core, player, stack.getHoverName().getString());
+            }
         }
 
-        core.initializeFoundation(core.getSizeX(), core.getSizeY(), core.getSizeZ());
+        core.initializeFoundation(placingPlayer, core.getSizeX(), core.getSizeY(), 0, core.getSizeZ());
+        if (!named && placingPlayer instanceof ServerPlayer serverPlayer) {
+            openNameMenu(serverPlayer, pos, "");
+        }
     }
 
     @Override
@@ -121,9 +129,10 @@ public class BaseCoreBlock extends BaseEntityBlock {
                     return InteractionResult.SUCCESS;
                 }
 
-                core.setBaseName(stack.getHoverName().getString());
+                if (!(level instanceof ServerLevel serverLevel) || !trySetRegisteredName(serverLevel, pos, core, player, stack.getHoverName().getString())) {
+                    return InteractionResult.SUCCESS;
+                }
                 level.playSound(null, pos, SoundEvents.ANVIL_USE, SoundSource.BLOCKS, 1.0F, 1.0F);
-                player.displayClientMessage(Component.translatable("message.easyadventure.renamed"), true);
                 if (!player.isCreative()) {
                     stack.shrink(1);
                 }
@@ -152,5 +161,19 @@ public class BaseCoreBlock extends BaseEntityBlock {
             });
         }
         return InteractionResult.sidedSuccess(level.isClientSide);
+    }
+
+    private static boolean trySetRegisteredName(ServerLevel level, BlockPos pos, BaseCoreBlockEntity core, Player player, String rawName) {
+        return core.renameBase(player, rawName);
+    }
+
+    private static void openNameMenu(ServerPlayer player, BlockPos pos, String currentName) {
+        NetworkHooks.openScreen(player, new SimpleMenuProvider(
+                (id, inventory, targetPlayer) -> new BaseNameMenu(id, inventory, pos, currentName),
+                Component.translatable("gui.easyadventure.base_name_title")
+        ), buffer -> {
+            buffer.writeBlockPos(pos);
+            buffer.writeUtf(currentName, 64);
+        });
     }
 }

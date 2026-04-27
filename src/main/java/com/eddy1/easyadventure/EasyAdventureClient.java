@@ -12,10 +12,17 @@ import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 public class EasyAdventureClient {
     @SubscribeEvent
     public static void onClientSetup(FMLClientSetupEvent event) {
-        event.enqueueWork(() -> ItemProperties.register(
-                ModItems.BASE_KEY_ITEM.get(),
-                EasyAdventure.id("has_data"),
-                (stack, level, entity, seed) -> KeyDataUtil.hasStoredStructure(stack) ? 1.0F : 0.0F
-        ));
+        event.enqueueWork(() -> {
+            ItemProperties.register(
+                    ModItems.BASE_KEY_ITEM.get(),
+                    EasyAdventure.id("has_data"),
+                    (stack, level, entity, seed) -> KeyDataUtil.hasStoredStructure(stack) ? 1.0F : 0.0F
+            );
+            ItemProperties.register(
+                    ModItems.BASE_KEY_ITEM.get(),
+                    EasyAdventure.id("obsolete"),
+                    (stack, level, entity, seed) -> KeyDataUtil.isObsoleteKey(stack) ? 1.0F : 0.0F
+            );
+        });
     }
 }

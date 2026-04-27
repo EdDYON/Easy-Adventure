@@ -1,6 +1,7 @@
 package com.eddy1.easyadventure.client.screen;
 
 import com.eddy1.easyadventure.block.BaseCoreBlockEntity;
+import com.eddy1.easyadventure.block.core.CoreClearMode;
 import com.eddy1.easyadventure.block.core.CorePasswordUtil;
 import com.eddy1.easyadventure.block.core.CorePermission;
 import com.eddy1.easyadventure.block.core.CoreResident;
@@ -79,12 +80,15 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
 
     private EditBox xEdit;
     private EditBox yEdit;
+    private EditBox downYEdit;
     private EditBox zEdit;
+    private EditBox baseNameEdit;
     private EditBox passwordEdit;
     private Button pageGeneralButton;
     private Button pageResidentsButton;
     private Button pageUpgradesButton;
     private Button passwordToggleButton;
+    private Button clearModeButton;
     private Button applyButton;
     private Button residentPickerButton;
     private Button residentCandidatePreviousButton;
@@ -96,6 +100,7 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
     private final Button[] residentButtons = new Button[RESIDENTS_PER_PAGE];
     private final Button[] permissionButtons = new Button[CorePermission.values().length];
     private boolean passwordEnabled;
+    private CoreClearMode clearMode = CoreClearMode.CLEAR;
     private Page currentPage = Page.GENERAL;
     private int residentPage;
     private @Nullable UUID selectedResidentUuid;
@@ -115,7 +120,10 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
         BaseCoreBlockEntity core = currentCore();
         int sizeX = core != null ? core.getSizeX() : 9;
         int sizeY = core != null ? core.getSizeY() : 5;
+        int sizeBelowY = core != null ? core.getSizeBelowY() : 0;
         int sizeZ = core != null ? core.getSizeZ() : 9;
+        String baseName = core != null ? core.getBaseName() : BaseCoreBlockEntity.DEFAULT_BASE_NAME;
+        clearMode = core != null ? core.getClearMode() : CoreClearMode.CLEAR;
         passwordEnabled = menu.isPasswordEnabled();
 
         int left = screenLeft();
@@ -134,24 +142,36 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
                 .size(TAB_W, TAB_H)
                 .build();
 
-        xEdit = createNumberBox(left + 118, top + 74, sizeX, !menu.isSizeLocked());
-        yEdit = createNumberBox(left + 118, top + 104, sizeY, !menu.isSizeLocked());
-        zEdit = createNumberBox(left + 118, top + 134, sizeZ, !menu.isSizeLocked());
+        xEdit = createNumberBox(left + 118, top + 68, sizeX, !menu.isSizeLocked());
+        yEdit = createNumberBox(left + 118, top + 92, sizeY, !menu.isSizeLocked());
+        downYEdit = createNumberBox(left + 118, top + 116, sizeBelowY, !menu.isSizeLocked());
+        zEdit = createNumberBox(left + 118, top + 140, sizeZ, !menu.isSizeLocked());
+
+        baseNameEdit = new EditBox(this.font, left + 220, top + 72, 146, 18, Component.empty());
+        baseNameEdit.setMaxLength(64);
+        baseNameEdit.setValue(baseName);
+        baseNameEdit.setFilter(input -> input.indexOf('\n') < 0 && input.indexOf('\r') < 0 && input.length() <= 64);
+
+        clearModeButton = Button.builder(Component.empty(), button -> toggleClearMode())
+                .pos(left + 220, top + 96)
+                .size(146, 20)
+                .build();
+        refreshClearModeLabel();
 
         passwordToggleButton = Button.builder(Component.empty(), button -> togglePassword())
-                .pos(left + 220, top + 74)
+                .pos(left + 220, top + 120)
                 .size(146, 20)
                 .build();
         refreshToggleLabel();
 
-        passwordEdit = new EditBox(this.font, left + 220, top + 106, 146, 18, Component.empty());
+        passwordEdit = new EditBox(this.font, left + 220, top + 144, 74, 18, Component.empty());
         passwordEdit.setMaxLength(CorePasswordUtil.MAX_PASSWORD_LENGTH);
         passwordEdit.setHint(Component.empty());
         passwordEdit.setFilter(input -> input.indexOf('\n') < 0 && input.indexOf('\r') < 0 && input.length() <= CorePasswordUtil.MAX_PASSWORD_LENGTH);
 
         applyButton = Button.builder(Component.translatable("button.easyadventure.apply"), button -> save())
-                .pos(left + 298, top + 136)
-                .size(68, 20)
+                .pos(left + 300, top + 143)
+                .size(66, 20)
                 .build();
 
         residentPickerButton = Button.builder(Component.empty(), button -> {
@@ -208,7 +228,10 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
         addRenderableWidget(pageUpgradesButton);
         addRenderableWidget(xEdit);
         addRenderableWidget(yEdit);
+        addRenderableWidget(downYEdit);
         addRenderableWidget(zEdit);
+        addRenderableWidget(baseNameEdit);
+        addRenderableWidget(clearModeButton);
         addRenderableWidget(passwordToggleButton);
         addRenderableWidget(passwordEdit);
         addRenderableWidget(applyButton);
@@ -307,8 +330,12 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
         int top = screenTop();
 
         drawTrimmed(guiGraphics, Component.translatable("gui.easyadventure.size_x"), left + GENERAL_LEFT_X + 10, top + GENERAL_CARD_Y + 20, 56, COLOR_TEXT);
-        drawTrimmed(guiGraphics, Component.translatable("gui.easyadventure.size_y"), left + GENERAL_LEFT_X + 10, top + GENERAL_CARD_Y + 50, 56, COLOR_TEXT);
-        drawTrimmed(guiGraphics, Component.translatable("gui.easyadventure.size_z"), left + GENERAL_LEFT_X + 10, top + GENERAL_CARD_Y + 80, 56, COLOR_TEXT);
+        drawTrimmed(guiGraphics, Component.translatable("gui.easyadventure.size_y"), left + GENERAL_LEFT_X + 10, top + GENERAL_CARD_Y + 44, 56, COLOR_TEXT);
+        drawTrimmed(guiGraphics, Component.translatable("gui.easyadventure.size_y_below"), left + GENERAL_LEFT_X + 10, top + GENERAL_CARD_Y + 68, 56, COLOR_TEXT);
+        drawTrimmed(guiGraphics, Component.translatable("gui.easyadventure.size_z"), left + GENERAL_LEFT_X + 10, top + GENERAL_CARD_Y + 92, 56, COLOR_TEXT);
+        drawTrimmed(guiGraphics, Component.translatable("gui.easyadventure.base_name"), left + GENERAL_RIGHT_X + 10, top + GENERAL_CARD_Y + 10, 96, COLOR_TEXT);
+        drawTrimmed(guiGraphics, Component.translatable("gui.easyadventure.clear_mode"), left + GENERAL_RIGHT_X + 10, top + GENERAL_CARD_Y + 34, 96, COLOR_TEXT);
+        drawTrimmed(guiGraphics, Component.translatable("gui.easyadventure.password"), left + GENERAL_RIGHT_X + 10, top + GENERAL_CARD_Y + 58, 96, COLOR_TEXT);
     }
 
     private void renderResidentsPage(GuiGraphics guiGraphics) {
@@ -364,7 +391,10 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
 
         setWidgetState(xEdit, generalPage, !menu.isSizeLocked());
         setWidgetState(yEdit, generalPage, !menu.isSizeLocked());
+        setWidgetState(downYEdit, generalPage, !menu.isSizeLocked());
         setWidgetState(zEdit, generalPage, !menu.isSizeLocked());
+        setWidgetState(baseNameEdit, generalPage, true);
+        setWidgetState(clearModeButton, generalPage, true);
         setWidgetState(passwordToggleButton, generalPage, true);
         setWidgetState(passwordEdit, generalPage, true);
         setWidgetState(applyButton, generalPage, true);
@@ -626,17 +656,37 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
         refreshToggleLabel();
     }
 
+    private void toggleClearMode() {
+        clearMode = clearMode.next();
+        refreshClearModeLabel();
+    }
+
     private void refreshToggleLabel() {
         passwordToggleButton.setMessage(Component.translatable(
                 passwordEnabled ? "button.easyadventure.password_on" : "button.easyadventure.password_off"
         ));
     }
 
+    private void refreshClearModeLabel() {
+        clearModeButton.setMessage(Component.translatable(clearMode.translationKey()));
+    }
+
     private void save() {
         int newX = clamp(parseValue(xEdit, 9), BaseCoreBlockEntity.MIN_SIZE_XZ, BaseCoreBlockEntity.MAX_SIZE_XZ);
         int newY = clamp(parseValue(yEdit, 5), BaseCoreBlockEntity.MIN_SIZE_Y, BaseCoreBlockEntity.MAX_SIZE_Y);
+        int newBelowY = clamp(parseValue(downYEdit, 0), BaseCoreBlockEntity.MIN_SIZE_BELOW_Y, BaseCoreBlockEntity.MAX_SIZE_BELOW_Y);
         int newZ = clamp(parseValue(zEdit, 9), BaseCoreBlockEntity.MIN_SIZE_XZ, BaseCoreBlockEntity.MAX_SIZE_XZ);
-        EasyAdventureNetwork.sendToServer(new UpdateCoreSizePayload(menu.getPos(), newX, newY, newZ, passwordEnabled, passwordEdit.getValue()));
+        EasyAdventureNetwork.sendToServer(new UpdateCoreSizePayload(
+                menu.getPos(),
+                newX,
+                newY,
+                newBelowY,
+                newZ,
+                baseNameEdit.getValue(),
+                clearMode,
+                passwordEnabled,
+                passwordEdit.getValue()
+        ));
         onClose();
     }
 
@@ -831,7 +881,9 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
     private boolean isEditingText() {
         return isFocusedEditBox(xEdit)
                 || isFocusedEditBox(yEdit)
+                || isFocusedEditBox(downYEdit)
                 || isFocusedEditBox(zEdit)
+                || isFocusedEditBox(baseNameEdit)
                 || isFocusedEditBox(passwordEdit);
     }
 

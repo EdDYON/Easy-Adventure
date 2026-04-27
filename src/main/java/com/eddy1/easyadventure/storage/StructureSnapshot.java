@@ -14,6 +14,7 @@ import java.util.List;
 public record StructureSnapshot(
         int sizeX,
         int sizeY,
+        int sizeBelowY,
         int sizeZ,
         List<SavedBlockInfo> blocks,
         List<CompoundTag> entities,
@@ -22,6 +23,7 @@ public record StructureSnapshot(
 ) {
     private static final String TAG_SIZE_X = "SavedSizeX";
     private static final String TAG_SIZE_Y = "SavedSizeY";
+    private static final String TAG_SIZE_BELOW_Y = "SavedSizeBelowY";
     private static final String TAG_SIZE_Z = "SavedSizeZ";
     private static final String TAG_BLOCKS = "BaseData";
     private static final String TAG_ENTITIES = "EntityData";
@@ -29,7 +31,15 @@ public record StructureSnapshot(
     private static final String TAG_SOURCE_DIMENSION = "SourceDimension";
 
     public StructureSnapshot(int sizeX, int sizeY, int sizeZ, List<SavedBlockInfo> blocks, List<CompoundTag> entities) {
-        this(sizeX, sizeY, sizeZ, blocks, entities, null, null);
+        this(sizeX, sizeY, 0, sizeZ, blocks, entities, null, null);
+    }
+
+    public StructureSnapshot(int sizeX, int sizeY, int sizeBelowY, int sizeZ, List<SavedBlockInfo> blocks, List<CompoundTag> entities) {
+        this(sizeX, sizeY, sizeBelowY, sizeZ, blocks, entities, null, null);
+    }
+
+    public StructureSnapshot(int sizeX, int sizeY, int sizeZ, List<SavedBlockInfo> blocks, List<CompoundTag> entities, @Nullable String packedAt, @Nullable String sourceDimension) {
+        this(sizeX, sizeY, 0, sizeZ, blocks, entities, packedAt, sourceDimension);
     }
 
     public StructureSnapshot {
@@ -43,6 +53,7 @@ public record StructureSnapshot(
         CompoundTag tag = new CompoundTag();
         tag.putInt(TAG_SIZE_X, sizeX);
         tag.putInt(TAG_SIZE_Y, sizeY);
+        tag.putInt(TAG_SIZE_BELOW_Y, sizeBelowY);
         tag.putInt(TAG_SIZE_Z, sizeZ);
         if (packedAt != null) {
             tag.putString(TAG_PACKED_AT, packedAt);
@@ -106,6 +117,7 @@ public record StructureSnapshot(
         return new StructureSnapshot(
                 swapsHorizontalSize ? sizeZ : sizeX,
                 sizeY,
+                sizeBelowY,
                 swapsHorizontalSize ? sizeX : sizeZ,
                 rotatedBlocks,
                 rotatedEntities,
@@ -117,6 +129,7 @@ public record StructureSnapshot(
     public static StructureSnapshot fromTag(CompoundTag tag) {
         int sizeX = tag.contains(TAG_SIZE_X) ? tag.getInt(TAG_SIZE_X) : 9;
         int sizeY = tag.contains(TAG_SIZE_Y) ? tag.getInt(TAG_SIZE_Y) : 5;
+        int sizeBelowY = tag.contains(TAG_SIZE_BELOW_Y) ? tag.getInt(TAG_SIZE_BELOW_Y) : 0;
         int sizeZ = tag.contains(TAG_SIZE_Z) ? tag.getInt(TAG_SIZE_Z) : 9;
         String packedAt = tag.contains(TAG_PACKED_AT) ? tag.getString(TAG_PACKED_AT) : null;
         String sourceDimension = tag.contains(TAG_SOURCE_DIMENSION) ? tag.getString(TAG_SOURCE_DIMENSION) : null;
@@ -137,7 +150,7 @@ public record StructureSnapshot(
             }
         }
 
-        return new StructureSnapshot(sizeX, sizeY, sizeZ, blocks, entities, packedAt, sourceDimension);
+        return new StructureSnapshot(sizeX, sizeY, sizeBelowY, sizeZ, blocks, entities, packedAt, sourceDimension);
     }
 
     private static SavedBlockInfo copyBlockInfo(SavedBlockInfo info) {

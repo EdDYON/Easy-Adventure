@@ -16,8 +16,8 @@ public final class CorePreview {
 
         double minX = center.getX() - volume.halfX() + 0.5D;
         double maxX = center.getX() + volume.halfX() + 0.5D;
-        double minY = center.getY() + 0.5D;
-        double maxY = center.getY() + volume.sizeY() + 0.5D;
+        double minY = center.getY() + volume.minYOffset() + 0.5D;
+        double maxY = center.getY() + volume.maxYOffset() + 0.5D;
         double minZ = center.getZ() - volume.halfZ() + 0.5D;
         double maxZ = center.getZ() + volume.halfZ() + 0.5D;
 

@@ -66,6 +66,10 @@ public class BuildingStorageData extends SavedData {
         return true;
     }
 
+    public boolean isLocked(UUID storageUuid) {
+        return lockMap.containsKey(storageUuid);
+    }
+
     public void unlockBuilding(UUID storageUuid, UUID coreUuid) {
         UUID currentLock = lockMap.get(storageUuid);
         if (currentLock != null && currentLock.equals(coreUuid)) {

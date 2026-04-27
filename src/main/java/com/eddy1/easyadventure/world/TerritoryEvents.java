@@ -306,7 +306,7 @@ public final class TerritoryEvents {
         for (int i = 0; i < 6; i++) {
             BlockPos samplePos = center.offset(
                     level.random.nextInt(core.getTerritoryVolume().sizeX()) - core.getTerritoryVolume().halfX(),
-                    level.random.nextInt(core.getTerritoryVolume().sizeY() + 1),
+                    level.random.nextInt(core.getTerritoryVolume().totalHeight()) - core.getTerritoryVolume().sizeBelowY(),
                     level.random.nextInt(core.getTerritoryVolume().sizeZ()) - core.getTerritoryVolume().halfZ()
             );
             BlockState state = level.getBlockState(samplePos);

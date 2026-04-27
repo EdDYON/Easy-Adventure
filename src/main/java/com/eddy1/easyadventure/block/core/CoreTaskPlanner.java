@@ -48,12 +48,13 @@ public final class CoreTaskPlanner {
             boolean firstInitialization
     ) {
         if (!firstInitialization) {
-            for (int y = oldVolume.sizeY(); y >= 0; y--) {
+            for (int y = oldVolume.maxYOffset(); y >= oldVolume.minYOffset(); y--) {
                 for (int x = -oldVolume.halfX(); x <= oldVolume.halfX(); x++) {
                     for (int z = -oldVolume.halfZ(); z <= oldVolume.halfZ(); z++) {
                         boolean insideNewBounds = (x >= -newVolume.halfX() && x <= newVolume.halfX())
                                 && (z >= -newVolume.halfZ() && z <= newVolume.halfZ())
-                                && y <= newVolume.sizeY();
+                                && y >= newVolume.minYOffset()
+                                && y <= newVolume.maxYOffset();
                         if (!insideNewBounds) {
                             BlockPos target = center.offset(x, y, z);
                             if (!target.equals(center)) {
@@ -65,21 +66,19 @@ public final class CoreTaskPlanner {
             }
         }
 
+        // Negative Y is part of the captured volume, but resizing the core should not dig out basements.
+        int generationMinY = Math.max(0, newVolume.minYOffset());
         for (int x = -newVolume.halfX(); x <= newVolume.halfX(); x++) {
             for (int z = -newVolume.halfZ(); z <= newVolume.halfZ(); z++) {
                 boolean oldColumn = (x >= -oldVolume.halfX() && x <= oldVolume.halfX())
                         && (z >= -oldVolume.halfZ() && z <= oldVolume.halfZ());
-                int startY = newVolume.sizeY();
-                int endY = 0;
-                if (!firstInitialization && oldColumn) {
-                    if (newVolume.sizeY() > oldVolume.sizeY()) {
-                        endY = oldVolume.sizeY() + 1;
-                    } else {
+                for (int y = newVolume.maxYOffset(); y >= generationMinY; y--) {
+                    if (!firstInitialization
+                            && oldColumn
+                            && y >= oldVolume.minYOffset()
+                            && y <= oldVolume.maxYOffset()) {
                         continue;
                     }
-                }
-
-                for (int y = startY; y >= endY; y--) {
                     BlockPos target = center.offset(x, y, z);
                     if (!target.equals(center)) {
                         queue.add(target);

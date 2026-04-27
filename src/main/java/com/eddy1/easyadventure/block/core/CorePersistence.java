@@ -44,7 +44,9 @@ public final class CorePersistence {
         tag.putBoolean("HasInitialized", state.initialized());
         tag.putInt("SizeX", state.sizeX());
         tag.putInt("SizeY", state.sizeY());
+        tag.putInt("SizeBelowY", state.sizeBelowY());
         tag.putInt("SizeZ", state.sizeZ());
+        tag.putString("ClearMode", state.clearMode().name());
         if (!state.residents().isEmpty()) {
             tag.put("Residents", serializeResidents(state.residents()));
         }
@@ -72,7 +74,11 @@ public final class CorePersistence {
         boolean hasInitialized = tag.contains("HasInitialized") && tag.getBoolean("HasInitialized");
         int sizeX = tag.contains("SizeX") ? tag.getInt("SizeX") : 9;
         int sizeY = tag.contains("SizeY") ? tag.getInt("SizeY") : 5;
+        int sizeBelowY = tag.contains("SizeBelowY") ? tag.getInt("SizeBelowY") : 0;
         int sizeZ = tag.contains("SizeZ") ? tag.getInt("SizeZ") : 9;
+        CoreClearMode clearMode = tag.contains("ClearMode")
+                ? CoreClearMode.fromName(tag.getString("ClearMode"))
+                : CoreClearMode.CLEAR;
         Map<UUID, CoreResident> residents = tag.contains("Residents")
                 ? deserializeResidents(tag.getList("Residents", Tag.TAG_COMPOUND))
                 : tag.contains("Collaborators")
@@ -104,7 +110,9 @@ public final class CorePersistence {
                 hasInitialized,
                 sizeX,
                 sizeY,
+                sizeBelowY,
                 sizeZ,
+                clearMode,
                 residents,
                 upgradeFuelTicks
         );
@@ -154,7 +162,9 @@ public final class CorePersistence {
         }
         tag.putInt("SizeX", state.sizeX());
         tag.putInt("SizeY", state.sizeY());
+        tag.putInt("SizeBelowY", state.sizeBelowY());
         tag.putInt("SizeZ", state.sizeZ());
+        tag.putString("ClearMode", state.clearMode().name());
         if (state.ownerName() != null) {
             tag.putString("OwnerName", state.ownerName());
         }

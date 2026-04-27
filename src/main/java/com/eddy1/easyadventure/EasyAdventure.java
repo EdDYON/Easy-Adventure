@@ -1,5 +1,6 @@
 package com.eddy1.easyadventure;
 
+import com.eddy1.easyadventure.command.EasyAdventureCommands;
 import com.eddy1.easyadventure.init.ModBlockEntities;
 import com.eddy1.easyadventure.init.ModBlocks;
 import com.eddy1.easyadventure.init.ModCreativeTabs;
@@ -9,6 +10,7 @@ import com.eddy1.easyadventure.network.EasyAdventureNetwork;
 import com.eddy1.easyadventure.world.TerritoryEvents;
 import com.mojang.logging.LogUtils;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
@@ -28,6 +30,7 @@ public class EasyAdventure {
         ModMenuTypes.register(modEventBus);
         EasyAdventureNetwork.register();
         TerritoryEvents.register();
+        MinecraftForge.EVENT_BUS.register(EasyAdventureCommands.class);
     }
 
     public static ResourceLocation id(String path) {

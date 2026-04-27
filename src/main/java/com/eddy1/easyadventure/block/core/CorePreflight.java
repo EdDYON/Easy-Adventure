@@ -7,7 +7,9 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import com.eddy1.easyadventure.util.SavedBlockInfo;
 
 public final class CorePreflight {
     private CorePreflight() {
@@ -29,7 +31,7 @@ public final class CorePreflight {
         BlockPos blockedPos = null;
         Component reason = null;
 
-        for (int y = 0; y <= volume.sizeY(); y++) {
+        for (int y = volume.minYOffset(); y <= volume.maxYOffset(); y++) {
             for (int x = -volume.halfX(); x <= volume.halfX(); x++) {
                 for (int z = -volume.halfZ(); z <= volume.halfZ(); z++) {
                     BlockPos pos = center.offset(x, y, z);
@@ -39,14 +41,18 @@ public final class CorePreflight {
 
                     total++;
                     BlockState state = level.getBlockState(pos);
+                    BlockEntity blockEntity = level.getBlockEntity(pos);
                     if (state.isAir()) {
+                        continue;
+                    }
+                    if (CoreCompat.isIgnoredDuringPack(state)) {
                         continue;
                     }
 
                     occupied++;
-                    if (level.getBlockEntity(pos) != null) {
+                    if (blockEntity != null) {
                         blockEntities++;
-                        if (level.getBlockEntity(pos) instanceof Container) {
+                        if (blockEntity instanceof Container) {
                             containers++;
                         }
                     }
@@ -56,6 +62,21 @@ public final class CorePreflight {
                             blockedPos = pos;
                             reason = Component.translatable(
                                     "message.easyadventure.precheck_blocked",
+                                    state.getBlock().getName(),
+                                    pos.getX(),
+                                    pos.getY(),
+                                    pos.getZ()
+                            );
+                        }
+                        continue;
+                    }
+
+                    if (CoreCompat.isDangerousToPack(state, blockEntity)) {
+                        blocked++;
+                        if (reason == null) {
+                            blockedPos = pos;
+                            reason = Component.translatable(
+                                    "message.easyadventure.precheck_dangerous",
                                     state.getBlock().getName(),
                                     pos.getX(),
                                     pos.getY(),
@@ -96,12 +117,26 @@ public final class CorePreflight {
     }
 
     public static CoreAreaCheckResult checkDeployment(ServerLevel level, BlockPos center, StructureSnapshot snapshot) {
-        CoreVolume volume = new CoreVolume(snapshot.sizeX(), snapshot.sizeY(), snapshot.sizeZ());
+        CoreVolume volume = new CoreVolume(snapshot.sizeX(), snapshot.sizeY(), snapshot.sizeBelowY(), snapshot.sizeZ());
         if (!hasAreaLoaded(level, center, volume)) {
             return new CoreAreaCheckResult(false, 0, 0, 1, snapshot.blockEntityCount(), 0, snapshot.entityCount(), null, Component.translatable("message.easyadventure.precheck_chunks_unloaded"));
         }
         if (!isWithinBounds(level, center, volume)) {
             return new CoreAreaCheckResult(false, 0, 0, 1, snapshot.blockEntityCount(), 0, snapshot.entityCount(), null, Component.translatable("message.easyadventure.precheck_world_bounds"));
+        }
+        SavedBlockInfo storedDangerous = firstDangerousStoredBlock(snapshot);
+        if (storedDangerous != null) {
+            return new CoreAreaCheckResult(
+                    false,
+                    0,
+                    0,
+                    1,
+                    snapshot.blockEntityCount(),
+                    0,
+                    snapshot.entityCount(),
+                    center.offset(storedDangerous.relativePos()),
+                    Component.translatable("message.easyadventure.precheck_stored_dangerous", storedDangerous.state().getBlock().getName())
+            );
         }
 
         int total = 0;
@@ -110,7 +145,7 @@ public final class CorePreflight {
         BlockPos blockedPos = null;
         Component reason = null;
 
-        for (int y = 0; y <= volume.sizeY(); y++) {
+        for (int y = volume.minYOffset(); y <= volume.maxYOffset(); y++) {
             for (int x = -volume.halfX(); x <= volume.halfX(); x++) {
                 for (int z = -volume.halfZ(); z <= volume.halfZ(); z++) {
                     BlockPos pos = center.offset(x, y, z);
@@ -121,6 +156,9 @@ public final class CorePreflight {
                     total++;
                     BlockState state = level.getBlockState(pos);
                     if (state.isAir()) {
+                        continue;
+                    }
+                    if (CoreCompat.isIgnoredDuringPack(state)) {
                         continue;
                     }
 
@@ -158,13 +196,13 @@ public final class CorePreflight {
     }
 
     private static boolean hasAreaLoaded(Level level, BlockPos center, CoreVolume volume) {
-        BlockPos min = center.offset(-volume.halfX(), 0, -volume.halfZ());
-        BlockPos max = center.offset(volume.halfX(), volume.sizeY(), volume.halfZ());
+        BlockPos min = center.offset(-volume.halfX(), volume.minYOffset(), -volume.halfZ());
+        BlockPos max = center.offset(volume.halfX(), volume.maxYOffset(), volume.halfZ());
         return level.hasChunksAt(min, max);
     }
 
     private static boolean isWithinBounds(Level level, BlockPos center, CoreVolume volume) {
-        for (int y = 0; y <= volume.sizeY(); y++) {
+        for (int y = volume.minYOffset(); y <= volume.maxYOffset(); y++) {
             for (int x = -volume.halfX(); x <= volume.halfX(); x++) {
                 for (int z = -volume.halfZ(); z <= volume.halfZ(); z++) {
                     BlockPos pos = center.offset(x, y, z);
@@ -175,5 +213,14 @@ public final class CorePreflight {
             }
         }
         return true;
+    }
+
+    private static SavedBlockInfo firstDangerousStoredBlock(StructureSnapshot snapshot) {
+        for (SavedBlockInfo info : snapshot.blocks()) {
+            if (CoreCompat.isDangerousToPack(info.state(), null)) {
+                return info;
+            }
+        }
+        return null;
     }
 }

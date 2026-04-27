@@ -9,6 +9,7 @@ import com.eddy1.easyadventure.block.core.CoreLifecycle;
 import com.eddy1.easyadventure.block.core.CorePackager;
 import com.eddy1.easyadventure.block.core.CorePasswordUtil;
 import com.eddy1.easyadventure.block.core.CorePermission;
+import com.eddy1.easyadventure.block.core.CoreClearMode;
 import com.eddy1.easyadventure.block.core.CorePersistence;
 import com.eddy1.easyadventure.block.core.CorePhaseProcessor;
 import com.eddy1.easyadventure.block.core.CorePreflight;
@@ -25,6 +26,7 @@ import com.eddy1.easyadventure.init.ModBlockEntities;
 import com.eddy1.easyadventure.storage.StructureSnapshot;
 import com.eddy1.easyadventure.util.BlockPlacementUtil;
 import com.eddy1.easyadventure.util.SavedBlockInfo;
+import com.eddy1.easyadventure.world.BaseRegistryData;
 import com.eddy1.easyadventure.world.BuildingStorageData;
 import com.eddy1.easyadventure.world.TerritoryManager;
 import net.minecraft.ChatFormatting;
@@ -63,6 +65,8 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
     public static final int MAX_SIZE_XZ = 64;
     public static final int MIN_SIZE_Y = 2;
     public static final int MAX_SIZE_Y = 320;
+    public static final int MIN_SIZE_BELOW_Y = 0;
+    public static final int MAX_SIZE_BELOW_Y = 128;
     public static final String DEFAULT_BASE_NAME = CoreStoredState.DEFAULT_BASE_NAME;
     private static final Comparator<SavedBlockInfo> PLACEMENT_ORDER = Comparator
             .comparingInt((SavedBlockInfo info) -> info.relativePos().getY())
@@ -88,7 +92,7 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
     private final CoreTerrainTracker terrainTracker = new CoreTerrainTracker();
     private final NonNullList<ItemStack> upgradeFuelInventory = NonNullList.withSize(CoreUpgrade.values().length, ItemStack.EMPTY);
 
-    private CoreStoredState storedState = new CoreStoredState(DEFAULT_BASE_NAME, UUID.randomUUID(), null, null, null, false, null, false, false, 9, 5, 9, Map.of(), Map.of());
+    private CoreStoredState storedState = new CoreStoredState(DEFAULT_BASE_NAME, UUID.randomUUID(), null, null, null, false, null, false, false, 9, 5, 0, 9, CoreClearMode.CLEAR, Map.of(), Map.of());
     private State persistedRuntimeState = State.IDLE;
 
     public BaseCoreBlockEntity(BlockPos pos, BlockState blockState) {
@@ -188,6 +192,10 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
         return storedState.sizeY();
     }
 
+    public int getSizeBelowY() {
+        return storedState.sizeBelowY();
+    }
+
     public int getSizeZ() {
         return storedState.sizeZ();
     }
@@ -214,6 +222,10 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
 
     public String getBaseName() {
         return storedState.baseName();
+    }
+
+    public CoreClearMode getClearMode() {
+        return storedState.clearMode();
     }
 
     public boolean isPasswordEnabled() {
@@ -335,7 +347,66 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
         }
     }
 
-    public boolean updateSettings(@Nullable Player player, int newX, int newY, int newZ, boolean passwordEnabled, @Nullable String rawPassword) {
+    public boolean renameBase(@Nullable Player player, @Nullable String rawName) {
+        if (!canPlayerManage(player)) {
+            notifyPlayer(player, "message.easyadventure.not_authorized_operation");
+            return false;
+        }
+
+        String name = BaseRegistryData.normalizeDisplayName(rawName == null ? "" : rawName);
+        if (name.isBlank()) {
+            notifyPlayer(player, "message.easyadventure.base_name_required");
+            return false;
+        }
+
+        if (!(level instanceof ServerLevel serverLevel)) {
+            setBaseName(name);
+            return true;
+        }
+
+        UUID ownerUuid = storedState.ownerUUID();
+        String ownerName = storedState.ownerName();
+        if (player != null && ownerUuid == null) {
+            setOwnerFromPlayer(player);
+            ownerUuid = storedState.ownerUUID();
+            ownerName = storedState.ownerName();
+        }
+        if (ownerUuid == null) {
+            notifyPlayer(player, "message.easyadventure.not_authorized_operation");
+            return false;
+        }
+
+        BaseRegistryData registry = BaseRegistryData.get(serverLevel);
+        if (registry.isNameTaken(ownerUuid, name, storedState.coreUUID())) {
+            notifyPlayer(player, Component.translatable("message.easyadventure.base_name_duplicate", name));
+            return false;
+        }
+
+        setBaseName(name);
+        registry.registerPlaced(
+                storedState.coreUUID(),
+                ownerUuid,
+                ownerName == null && player != null ? player.getGameProfile().getName() : ownerName,
+                name,
+                null,
+                serverLevel.dimension().location(),
+                worldPosition
+        );
+        notifyPlayer(player, Component.translatable("message.easyadventure.base_name_saved", name));
+        return true;
+    }
+
+    public boolean updateSettings(
+            @Nullable Player player,
+            int newX,
+            int newY,
+            int newBelowY,
+            int newZ,
+            @Nullable String rawBaseName,
+            CoreClearMode clearMode,
+            boolean passwordEnabled,
+            @Nullable String rawPassword
+    ) {
         boolean managerAccess = canPlayerManage(player);
         if (!managerAccess && !canResize(player)) {
             notifyPlayer(player, "message.easyadventure.not_authorized_operation");
@@ -351,7 +422,24 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
         } else if (!updatePasswordSettings(player, passwordEnabled, rawPassword)) {
             return false;
         }
-        return initializeFoundation(player, newX, newY, newZ);
+
+        String requestedBaseName = BaseRegistryData.normalizeDisplayName(rawBaseName == null ? "" : rawBaseName);
+        String currentBaseName = BaseRegistryData.normalizeDisplayName(getBaseName());
+        if (!requestedBaseName.isBlank() && !requestedBaseName.equals(currentBaseName)) {
+            if (!renameBase(player, requestedBaseName)) {
+                return false;
+            }
+        }
+
+        if (clearMode != storedState.clearMode()) {
+            applyStoredState(storedState.withClearMode(clearMode));
+            setChanged();
+            if (level != null) {
+                level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), Block.UPDATE_CLIENTS);
+            }
+        }
+
+        return initializeFoundation(player, newX, newY, newBelowY, newZ);
     }
 
     public boolean updatePasswordSettings(@Nullable Player player, boolean passwordEnabled, @Nullable String rawPassword) {
@@ -379,11 +467,11 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
         return true;
     }
 
-    public boolean initializeFoundation(int newX, int newY, int newZ) {
-        return initializeFoundation(null, newX, newY, newZ);
+    public boolean initializeFoundation(int newX, int newY, int newBelowY, int newZ) {
+        return initializeFoundation(null, newX, newY, newBelowY, newZ);
     }
 
-    public boolean initializeFoundation(@Nullable Player player, int newX, int newY, int newZ) {
+    public boolean initializeFoundation(@Nullable Player player, int newX, int newY, int newBelowY, int newZ) {
         if (runtime.isBusy()) {
             notifyPlayer(player, "message.easyadventure.core_busy");
             return false;
@@ -395,20 +483,22 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
 
         int clampedX = clamp(newX, MIN_SIZE_XZ, MAX_SIZE_XZ);
         int clampedY = clamp(newY, MIN_SIZE_Y, MAX_SIZE_Y);
+        int clampedBelowY = clamp(newBelowY, MIN_SIZE_BELOW_Y, MAX_SIZE_BELOW_Y);
         int clampedZ = clamp(newZ, MIN_SIZE_XZ, MAX_SIZE_XZ);
         int oldX = storedState.sizeX();
         int oldY = storedState.sizeY();
+        int oldBelowY = storedState.sizeBelowY();
         int oldZ = storedState.sizeZ();
         boolean firstInitialization = !storedState.initialized();
 
-        if (!firstInitialization && oldX == clampedX && oldY == clampedY && oldZ == clampedZ) {
+        if (!firstInitialization && oldX == clampedX && oldY == clampedY && oldBelowY == clampedBelowY && oldZ == clampedZ) {
             return true;
         }
 
         if (player != null) {
             setOwnerFromPlayer(player);
         }
-        applyStoredState(storedState.withSize(clampedX, clampedY, clampedZ).withInitialized(true));
+        applyStoredState(storedState.withSize(clampedX, clampedY, clampedBelowY, clampedZ).withInitialized(true));
         setChanged();
         if (level instanceof ServerLevel serverLevel) {
             TerritoryManager.refresh(serverLevel, this);
@@ -423,7 +513,7 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
             terrainTracker.clear();
         }
 
-        startSmartResizeTask(oldX, oldY, oldZ, getSizeX(), getSizeY(), getSizeZ(), firstInitialization);
+        startSmartResizeTask(oldX, oldY, oldBelowY, oldZ, getSizeX(), getSizeY(), getSizeBelowY(), getSizeZ(), firstInitialization);
         return true;
     }
 
@@ -435,6 +525,7 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
             @Nullable String ownerName,
             boolean passwordEnabled,
             @Nullable String passwordHash,
+            CoreClearMode clearMode,
             @Nullable UUID storageUUID,
             Map<UUID, CoreResident> residents,
             Map<CoreUpgrade, Integer> upgradeFuelTicks,
@@ -448,6 +539,7 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
                 ownerName,
                 passwordEnabled,
                 passwordHash,
+                clearMode,
                 storageUUID,
                 residents,
                 upgradeFuelTicks,
@@ -463,6 +555,7 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
             @Nullable String ownerName,
             boolean passwordEnabled,
             @Nullable String passwordHash,
+            CoreClearMode clearMode,
             @Nullable UUID storageUUID,
             Map<UUID, CoreResident> residents,
             Map<CoreUpgrade, Integer> upgradeFuelTicks,
@@ -473,12 +566,13 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
         }
 
         applyStoredState(storedState
-                .withSize(snapshot.sizeX(), snapshot.sizeY(), snapshot.sizeZ())
+                .withSize(snapshot.sizeX(), snapshot.sizeY(), snapshot.sizeBelowY(), snapshot.sizeZ())
                 .withInitialized(true)
                 .withName(name)
                 .withBinding(true, boundUUID)
                 .withOwner(ownerUUID, ownerName)
                 .withPassword(passwordEnabled, passwordHash)
+                .withClearMode(clearMode)
                 .withActiveStorage(storageUUID)
                 .withResidents(residents)
                 .withUpgradeFuelTicks(upgradeFuelTicks));
@@ -696,22 +790,29 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
         }
 
         if (getBlockState().getBlock() instanceof BaseCoreBlock coreBlock && !storedState.initialized()) {
-            applyStoredState(storedState.withSize(coreBlock.getSizeX(), coreBlock.getSizeY(), coreBlock.getSizeZ()));
+            applyStoredState(storedState.withSize(coreBlock.getSizeX(), coreBlock.getSizeY(), 0, coreBlock.getSizeZ()));
         }
     }
 
-    private void startSmartResizeTask(int oldX, int oldY, int oldZ, int newX, int newY, int newZ, boolean firstInitialization) {
+    private void startSmartResizeTask(int oldX, int oldY, int oldBelowY, int oldZ, int newX, int newY, int newBelowY, int newZ, boolean firstInitialization) {
         CoreLifecycle.startResize(
                 runtime,
                 worldPosition,
-                new CoreVolume(oldX, oldY, oldZ),
-                new CoreVolume(newX, newY, newZ),
+                new CoreVolume(oldX, oldY, oldBelowY, oldZ),
+                new CoreVolume(newX, newY, newBelowY, newZ),
                 firstInitialization
         );
         setChanged();
     }
 
     private void startDeployment() {
+        if (storedState.clearMode() == CoreClearMode.KEEP) {
+            if (level != null) {
+                level.playSound(null, worldPosition, SoundEvents.BEACON_DEACTIVATE, SoundSource.BLOCKS, 2.0F, 0.5F);
+            }
+            startBuildingPhase();
+            return;
+        }
         CoreLifecycle.startDeployment(runtime, worldPosition, currentVolume());
         setChanged();
         if (level != null) {
@@ -753,14 +854,14 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
         if (level == null) {
             return;
         }
-        CorePhaseProcessor.processGenerating(level, worldPosition, currentVolume(), terrainTracker, pos, this::captureBlockEntityData);
+        CorePhaseProcessor.processGenerating(level, worldPosition, currentVolume(), terrainTracker, pos, storedState.clearMode(), this::captureBlockEntityData);
     }
 
     private void processClearing(BlockPos pos) {
         if (level == null) {
             return;
         }
-        CorePhaseProcessor.processClearing(level, worldPosition, terrainTracker, pos, this::captureBlockEntityData);
+        CorePhaseProcessor.processClearing(level, worldPosition, terrainTracker, pos, storedState.clearMode(), this::captureBlockEntityData);
     }
 
     private void processUnpacking(BlockPos targetPos) {
@@ -826,6 +927,7 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
                 storedState.passwordHash(),
                 workspace,
                 currentVolume(),
+                storedState.clearMode(),
                 storedState.residents(),
                 storedState.upgradeFuelTicks(),
                 queuedUpgradeFuelCounts
@@ -934,7 +1036,9 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
                 nextState.initialized(),
                 clamp(nextState.sizeX(), MIN_SIZE_XZ, MAX_SIZE_XZ),
                 clamp(nextState.sizeY(), MIN_SIZE_Y, MAX_SIZE_Y),
+                clamp(nextState.sizeBelowY(), MIN_SIZE_BELOW_Y, MAX_SIZE_BELOW_Y),
                 clamp(nextState.sizeZ(), MIN_SIZE_XZ, MAX_SIZE_XZ),
+                nextState.clearMode(),
                 nextState.residents(),
                 nextState.upgradeFuelTicks()
         );

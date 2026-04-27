@@ -41,10 +41,20 @@ public final class EasyAdventureNetwork {
                 .decoder(UpdateCoreResidentPayload::decode)
                 .consumerMainThread(UpdateCoreResidentPayload::handle)
                 .add();
-        CHANNEL.messageBuilder(UpdateResidentPermissionPayload.class, id, NetworkDirection.PLAY_TO_SERVER)
+        CHANNEL.messageBuilder(UpdateResidentPermissionPayload.class, id++, NetworkDirection.PLAY_TO_SERVER)
                 .encoder(UpdateResidentPermissionPayload::encode)
                 .decoder(UpdateResidentPermissionPayload::decode)
                 .consumerMainThread(UpdateResidentPermissionPayload::handle)
+                .add();
+        CHANNEL.messageBuilder(RecallBasePayload.class, id++, NetworkDirection.PLAY_TO_SERVER)
+                .encoder(RecallBasePayload::encode)
+                .decoder(RecallBasePayload::decode)
+                .consumerMainThread(RecallBasePayload::handle)
+                .add();
+        CHANNEL.messageBuilder(SubmitBaseNamePayload.class, id++, NetworkDirection.PLAY_TO_SERVER)
+                .encoder(SubmitBaseNamePayload::encode)
+                .decoder(SubmitBaseNamePayload::decode)
+                .consumerMainThread(SubmitBaseNamePayload::handle)
                 .add();
     }
 
