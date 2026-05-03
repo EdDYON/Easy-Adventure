@@ -30,6 +30,18 @@ public record CoreVolume(int sizeX, int sizeY, int sizeBelowY, int sizeZ) {
         return sizeY + sizeBelowY + 1;
     }
 
+    public int blockWidthX() {
+        return halfX() * 2 + 1;
+    }
+
+    public int blockWidthZ() {
+        return halfZ() * 2 + 1;
+    }
+
+    public long blockCount() {
+        return (long) blockWidthX() * totalHeight() * blockWidthZ();
+    }
+
     public boolean contains(BlockPos center, BlockPos pos) {
         int relativeY = pos.getY() - center.getY();
         return Math.abs(pos.getX() - center.getX()) <= halfX()

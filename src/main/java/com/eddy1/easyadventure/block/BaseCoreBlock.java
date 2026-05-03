@@ -2,7 +2,6 @@ package com.eddy1.easyadventure.block;
 
 import com.eddy1.easyadventure.init.ModBlockEntities;
 import com.eddy1.easyadventure.init.ModItems;
-import com.eddy1.easyadventure.menu.BaseNameMenu;
 import com.eddy1.easyadventure.menu.CoreSizeMenu;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
@@ -94,19 +93,17 @@ public class BaseCoreBlock extends BaseEntityBlock {
             return;
         }
 
-        boolean named = false;
         Player placingPlayer = placer instanceof Player player ? player : null;
         if (placingPlayer != null) {
             Player player = placingPlayer;
             core.setOwnerFromPlayer(player);
             if (stack.hasCustomHoverName() && level instanceof ServerLevel serverLevel) {
-                named = trySetRegisteredName(serverLevel, pos, core, player, stack.getHoverName().getString());
+                trySetRegisteredName(serverLevel, pos, core, player, stack.getHoverName().getString());
             }
         }
 
-        core.initializeFoundation(placingPlayer, core.getSizeX(), core.getSizeY(), 0, core.getSizeZ());
-        if (!named && placingPlayer instanceof ServerPlayer serverPlayer) {
-            openNameMenu(serverPlayer, pos, "");
+        if (placingPlayer instanceof ServerPlayer serverPlayer) {
+            openCoreMenu(serverPlayer, pos, core);
         }
     }
 
@@ -150,15 +147,7 @@ public class BaseCoreBlock extends BaseEntityBlock {
                 return InteractionResult.SUCCESS;
             }
 
-            NetworkHooks.openScreen(serverPlayer, new SimpleMenuProvider(
-                    (id, inventory, targetPlayer) -> new CoreSizeMenu(id, inventory, pos, false, core.isPasswordEnabled(), core.isBound()),
-                    Component.translatable("gui.easyadventure.core_size_title")
-            ), buffer -> {
-                buffer.writeBlockPos(pos);
-                buffer.writeBoolean(false);
-                buffer.writeBoolean(core.isPasswordEnabled());
-                buffer.writeBoolean(core.isBound());
-            });
+            openCoreMenu(serverPlayer, pos, core);
         }
         return InteractionResult.sidedSuccess(level.isClientSide);
     }
@@ -167,13 +156,16 @@ public class BaseCoreBlock extends BaseEntityBlock {
         return core.renameBase(player, rawName);
     }
 
-    private static void openNameMenu(ServerPlayer player, BlockPos pos, String currentName) {
+    private static void openCoreMenu(ServerPlayer player, BlockPos pos, BaseCoreBlockEntity core) {
+        boolean sizeLocked = core.isTerritoryActive();
         NetworkHooks.openScreen(player, new SimpleMenuProvider(
-                (id, inventory, targetPlayer) -> new BaseNameMenu(id, inventory, pos, currentName),
-                Component.translatable("gui.easyadventure.base_name_title")
+                (id, inventory, targetPlayer) -> new CoreSizeMenu(id, inventory, pos, sizeLocked, core.isPasswordEnabled(), core.isBound()),
+                Component.translatable(core.isTerritoryActive() ? "gui.easyadventure.core_size_title" : "gui.easyadventure.core_setup_title")
         ), buffer -> {
             buffer.writeBlockPos(pos);
-            buffer.writeUtf(currentName, 64);
+            buffer.writeBoolean(sizeLocked);
+            buffer.writeBoolean(core.isPasswordEnabled());
+            buffer.writeBoolean(core.isBound());
         });
     }
 }

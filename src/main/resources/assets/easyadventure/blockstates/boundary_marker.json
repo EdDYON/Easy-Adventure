@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "easyadventure:block/boundary_marker"
+    }
+  }
+}

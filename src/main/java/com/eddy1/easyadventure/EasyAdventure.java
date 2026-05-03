@@ -1,6 +1,7 @@
 package com.eddy1.easyadventure;
 
 import com.eddy1.easyadventure.command.EasyAdventureCommands;
+import com.eddy1.easyadventure.config.EasyAdventureServerConfig;
 import com.eddy1.easyadventure.init.ModBlockEntities;
 import com.eddy1.easyadventure.init.ModBlocks;
 import com.eddy1.easyadventure.init.ModCreativeTabs;
@@ -12,7 +13,9 @@ import com.mojang.logging.LogUtils;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.eventbus.api.IEventBus;
+import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import org.slf4j.Logger;
 
@@ -29,6 +32,7 @@ public class EasyAdventure {
         ModCreativeTabs.CREATIVE_MODE_TABS.register(modEventBus);
         ModMenuTypes.register(modEventBus);
         EasyAdventureNetwork.register();
+        ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, EasyAdventureServerConfig.SPEC);
         TerritoryEvents.register();
         MinecraftForge.EVENT_BUS.register(EasyAdventureCommands.class);
     }

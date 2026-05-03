@@ -141,7 +141,8 @@ public final class BaseRecallService {
                 baseName,
                 null,
                 player.serverLevel().dimension().location(),
-                pos
+                pos,
+                core.getTerritoryVolume()
         );
         return true;
     }

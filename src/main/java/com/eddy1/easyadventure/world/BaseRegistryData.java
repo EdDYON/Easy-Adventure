@@ -1,5 +1,6 @@
 package com.eddy1.easyadventure.world;
 
+import com.eddy1.easyadventure.block.core.CoreVolume;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -81,10 +82,24 @@ public class BaseRegistryData extends SavedData {
             @Nullable ResourceLocation dimension,
             @Nullable BlockPos pos
     ) {
+        registerPlaced(coreUuid, ownerUuid, ownerName, baseName, keyUuid, dimension, pos, null);
+    }
+
+    public void registerPlaced(
+            UUID coreUuid,
+            UUID ownerUuid,
+            String ownerName,
+            String baseName,
+            @Nullable UUID keyUuid,
+            @Nullable ResourceLocation dimension,
+            @Nullable BlockPos pos,
+            @Nullable CoreVolume volume
+    ) {
         BaseRecord existing = recordsByCore.get(coreUuid);
         UUID effectiveKeyUuid = keyUuid != null ? keyUuid : existing == null ? null : existing.keyUuid();
         UUID storageUuid = existing == null ? null : existing.storageUuid();
         CompoundTag keyStackTag = existing == null ? null : existing.keyStackTag();
+        CoreVolume effectiveVolume = volume != null ? volume : existing == null ? null : existing.volumeOrNull();
         recordsByCore.put(coreUuid, new BaseRecord(
                 coreUuid,
                 ownerUuid,
@@ -95,7 +110,11 @@ public class BaseRegistryData extends SavedData {
                 STATE_PLACED,
                 dimension == null ? null : dimension.toString(),
                 pos,
-                keyStackTag == null ? null : keyStackTag.copy()
+                keyStackTag == null ? null : keyStackTag.copy(),
+                effectiveVolume == null ? 0 : effectiveVolume.sizeX(),
+                effectiveVolume == null ? 0 : effectiveVolume.sizeY(),
+                effectiveVolume == null ? 0 : effectiveVolume.sizeBelowY(),
+                effectiveVolume == null ? 0 : effectiveVolume.sizeZ()
         ));
         setDirty();
     }
@@ -123,7 +142,11 @@ public class BaseRegistryData extends SavedData {
                 STATE_PACKED,
                 sourceDimension,
                 null,
-                keyStackTag == null ? null : keyStackTag.copy()
+                keyStackTag == null ? null : keyStackTag.copy(),
+                0,
+                0,
+                0,
+                0
         ));
         setDirty();
     }
@@ -159,6 +182,20 @@ public class BaseRegistryData extends SavedData {
         return records;
     }
 
+    public List<BaseRecord> placedRecordsInDimension(ResourceLocation dimension) {
+        List<BaseRecord> records = new ArrayList<>();
+        String dimensionId = dimension.toString();
+        for (BaseRecord record : recordsByCore.values()) {
+            if (STATE_PLACED.equals(record.state())
+                    && dimensionId.equals(record.dimension())
+                    && record.pos() != null
+                    && record.volumeOrNull() != null) {
+                records.add(record);
+            }
+        }
+        return records;
+    }
+
     public static String normalizeBaseName(String name) {
         return normalizeDisplayName(name).toLowerCase(Locale.ROOT);
     }
@@ -181,7 +218,11 @@ public class BaseRegistryData extends SavedData {
             String state,
             @Nullable String dimension,
             @Nullable BlockPos pos,
-            @Nullable CompoundTag keyStackTag
+            @Nullable CompoundTag keyStackTag,
+            int sizeX,
+            int sizeY,
+            int sizeBelowY,
+            int sizeZ
     ) {
         private static @Nullable BaseRecord fromTag(CompoundTag tag) {
             if (!tag.hasUUID("CoreUUID") || !tag.hasUUID("OwnerUUID")) {
@@ -203,7 +244,11 @@ public class BaseRegistryData extends SavedData {
                     tag.contains("State") ? tag.getString("State") : STATE_PLACED,
                     tag.contains("Dimension") ? tag.getString("Dimension") : null,
                     pos,
-                    tag.contains("KeyStack", Tag.TAG_COMPOUND) ? tag.getCompound("KeyStack").copy() : null
+                    tag.contains("KeyStack", Tag.TAG_COMPOUND) ? tag.getCompound("KeyStack").copy() : null,
+                    tag.getInt("SizeX"),
+                    tag.getInt("SizeY"),
+                    tag.getInt("SizeBelowY"),
+                    tag.getInt("SizeZ")
             );
         }
 
@@ -231,11 +276,24 @@ public class BaseRegistryData extends SavedData {
             if (keyStackTag != null) {
                 tag.put("KeyStack", keyStackTag.copy());
             }
+            if (sizeX > 0 && sizeY > 0 && sizeZ > 0) {
+                tag.putInt("SizeX", sizeX);
+                tag.putInt("SizeY", sizeY);
+                tag.putInt("SizeBelowY", Math.max(0, sizeBelowY));
+                tag.putInt("SizeZ", sizeZ);
+            }
             return tag;
         }
 
         public String normalizedBaseName() {
             return normalizeBaseName(baseName);
+        }
+
+        public @Nullable CoreVolume volumeOrNull() {
+            if (sizeX <= 0 || sizeY <= 0 || sizeZ <= 0) {
+                return null;
+            }
+            return new CoreVolume(sizeX, sizeY, Math.max(0, sizeBelowY), sizeZ);
         }
     }
 }

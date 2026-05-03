@@ -19,7 +19,10 @@ public final class ModCreativeTabs {
                     .icon(() -> ModItems.BASE_KEY_ITEM.get().getDefaultInstance())
                     .displayItems((parameters, output) -> {
                         output.accept(ModItems.BASE_KEY_ITEM.get());
+                        output.accept(ModItems.PREFLIGHT_SCROLL_ITEM.get());
+                        output.accept(ModItems.BASE_ARCHIVE_BOOK_ITEM.get());
                         output.accept(ModItems.BASE_CORE_ITEM.get());
+                        output.accept(ModItems.BOUNDARY_MARKER_ITEM.get());
                         output.accept(ModItems.KEY_RECALL_TABLE_ITEM.get());
                     })
                     .build());

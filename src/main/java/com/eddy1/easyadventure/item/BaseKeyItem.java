@@ -38,8 +38,10 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraft.world.level.block.Rotation;
+import net.minecraftforge.common.util.BlockSnapshot;
+import net.minecraftforge.event.ForgeEventFactory;
 import net.minecraftforge.network.NetworkHooks;
 
 import java.util.List;
@@ -128,10 +130,6 @@ public class BaseKeyItem extends Item {
                 tooltipComponents.add(Component.translatable("tooltip.easyadventure.source_dimension", sourceDimension).withStyle(ChatFormatting.GRAY));
             }
 
-            tooltipComponents.add(Component.translatable(
-                    "tooltip.easyadventure.deploy_rotation",
-                    Component.translatable(rotationLabelKey(KeyDataUtil.getDeployRotation(stack)))
-            ).withStyle(ChatFormatting.LIGHT_PURPLE));
         }
     }
 
@@ -142,19 +140,7 @@ public class BaseKeyItem extends Item {
         if (!ensureCurrentKey(player, stack)) {
             return InteractionResultHolder.fail(stack);
         }
-        if (!player.isShiftKeyDown() || !KeyDataUtil.hasStoredStructure(stack)) {
-            return InteractionResultHolder.pass(stack);
-        }
-
-        if (!level.isClientSide) {
-            int nextRotation = (KeyDataUtil.getDeployRotation(stack) + 1) % 4;
-            KeyDataUtil.setDeployRotation(stack, nextRotation);
-            player.displayClientMessage(Component.translatable(
-                    "message.easyadventure.rotation_changed",
-                    Component.translatable(rotationLabelKey(nextRotation))
-            ), true);
-        }
-        return InteractionResultHolder.sidedSuccess(stack, level.isClientSide());
+        return InteractionResultHolder.pass(stack);
     }
 
     @Override
@@ -232,7 +218,7 @@ public class BaseKeyItem extends Item {
         }
 
         CoreVolume volume = new CoreVolume(core.getSizeX(), core.getSizeY(), core.getSizeBelowY(), core.getSizeZ());
-        CoreAreaCheckResult result = CorePreflight.checkPacking(level, core.getBlockPos(), volume);
+        CoreAreaCheckResult result = CorePreflight.checkPacking(level, core.getBlockPos(), volume, player instanceof ServerPlayer serverPlayer ? serverPlayer : null);
         CorePreview.show(level, core.getBlockPos(), volume, !result.ok());
         player.displayClientMessage(Component.translatable(
                 "message.easyadventure.preview_summary",
@@ -261,6 +247,10 @@ public class BaseKeyItem extends Item {
         }
 
         UUID keyBoundId = KeyDataUtil.getBoundUuid(stack);
+        if (keyBoundId != null && !keyBoundId.equals(core.getCoreUUID())) {
+            player.displayClientMessage(Component.translatable("message.easyadventure.key_already_bound"), true);
+            return InteractionResult.FAIL;
+        }
         if (core.isBound() && (keyBoundId == null || !keyBoundId.equals(core.getCoreUUID()))) {
             player.displayClientMessage(Component.translatable("message.easyadventure.key_mismatch"), true);
             return InteractionResult.FAIL;
@@ -290,7 +280,8 @@ public class BaseKeyItem extends Item {
                     requestedBaseName,
                     KeyDataUtil.getKeyUuid(stack),
                     serverLevel.dimension().location(),
-                    core.getBlockPos()
+                    core.getBlockPos(),
+                    core.getTerritoryVolume()
             );
         }
 
@@ -323,9 +314,9 @@ public class BaseKeyItem extends Item {
             return InteractionResult.FAIL;
         }
 
-        StructureSnapshot snapshot = StructureSnapshot.fromTag(heavyData).rotated(toRotation(KeyDataUtil.getDeployRotation(stack)));
+        StructureSnapshot snapshot = StructureSnapshot.fromTag(heavyData);
         BlockPos placePos = context.getClickedPos().relative(context.getClickedFace());
-        CoreAreaCheckResult result = CorePreflight.checkDeployment(serverLevel, placePos, snapshot);
+        CoreAreaCheckResult result = CorePreflight.checkDeployment(serverLevel, placePos, snapshot, player instanceof ServerPlayer serverPlayer ? serverPlayer : null);
         CorePreview.show(serverLevel, placePos, new CoreVolume(snapshot.sizeX(), snapshot.sizeY(), snapshot.sizeBelowY(), snapshot.sizeZ()), !result.ok());
         player.displayClientMessage(Component.translatable(
                 "message.easyadventure.preview_summary",
@@ -362,6 +353,16 @@ public class BaseKeyItem extends Item {
         if (!level.getBlockState(placePos).canBeReplaced()) {
             return InteractionResult.FAIL;
         }
+        if (!canPlaceCore(serverLevel, player, placePos, face)) {
+            player.displayClientMessage(Component.translatable(
+                    "message.easyadventure.precheck_protected",
+                    ModBlocks.BASE_CORE.get().getName(),
+                    placePos.getX(),
+                    placePos.getY(),
+                    placePos.getZ()
+            ), true);
+            return InteractionResult.FAIL;
+        }
 
         BuildingStorageData storage = BuildingStorageData.get(serverLevel);
         UUID coreUuid = KeyDataUtil.getBoundUuid(stack);
@@ -377,8 +378,7 @@ public class BaseKeyItem extends Item {
             return InteractionResult.FAIL;
         }
 
-        snapshot = snapshot.rotated(toRotation(KeyDataUtil.getDeployRotation(stack)));
-        CoreAreaCheckResult precheck = CorePreflight.checkDeployment(serverLevel, placePos, snapshot);
+        CoreAreaCheckResult precheck = CorePreflight.checkDeployment(serverLevel, placePos, snapshot, player instanceof ServerPlayer serverPlayer ? serverPlayer : null);
         if (!precheck.ok()) {
             CorePreview.show(serverLevel, placePos, new CoreVolume(snapshot.sizeX(), snapshot.sizeY(), snapshot.sizeBelowY(), snapshot.sizeZ()), true);
             if (precheck.reason() != null) {
@@ -429,7 +429,8 @@ public class BaseKeyItem extends Item {
                 newCore.getBaseName(),
                 KeyDataUtil.ensureKeyUuid(stack),
                 serverLevel.dimension().location(),
-                placePos
+                placePos,
+                newCore.getTerritoryVolume()
         );
         level.playSound(null, placePos, SoundEvents.BEACON_ACTIVATE, SoundSource.BLOCKS, 1.0F, 1.0F);
         serverLevel.sendParticles(ParticleTypes.EXPLOSION_EMITTER, placePos.getX() + 0.5, placePos.getY() + 1.0, placePos.getZ() + 0.5, 1, 0.0, 0.0, 0.0, 0.0);
@@ -675,21 +676,12 @@ public class BaseKeyItem extends Item {
         return KeyDataUtil.getResidents(stack).containsKey(player.getUUID());
     }
 
-    private static Rotation toRotation(int rotationId) {
-        return switch (Math.floorMod(rotationId, 4)) {
-            case 1 -> Rotation.CLOCKWISE_90;
-            case 2 -> Rotation.CLOCKWISE_180;
-            case 3 -> Rotation.COUNTERCLOCKWISE_90;
-            default -> Rotation.NONE;
-        };
+    private static boolean canPlaceCore(ServerLevel level, Player player, BlockPos pos, Direction face) {
+        if (!(player instanceof ServerPlayer serverPlayer)) {
+            return true;
+        }
+        BlockSnapshot snapshot = BlockSnapshot.create(level.dimension(), level, pos, Block.UPDATE_CLIENTS);
+        return !ForgeEventFactory.onBlockPlace(serverPlayer, snapshot, face);
     }
 
-    private static String rotationLabelKey(int rotationId) {
-        return switch (Math.floorMod(rotationId, 4)) {
-            case 1 -> "tooltip.easyadventure.rotation_90";
-            case 2 -> "tooltip.easyadventure.rotation_180";
-            case 3 -> "tooltip.easyadventure.rotation_270";
-            default -> "tooltip.easyadventure.rotation_0";
-        };
-    }
 }

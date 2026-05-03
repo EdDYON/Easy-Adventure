@@ -23,6 +23,8 @@ public record CoreStoredState(
         int sizeBelowY,
         int sizeZ,
         CoreClearMode clearMode,
+        boolean foundationEnabled,
+        CoreFoundationMaterial foundationMaterial,
         Map<UUID, CoreResident> residents,
         Map<CoreUpgrade, Integer> upgradeFuelTicks
 ) {
@@ -35,6 +37,7 @@ public record CoreStoredState(
         coreUUID = coreUUID == null ? UUID.randomUUID() : coreUUID;
         ownerName = ownerName == null || ownerName.isBlank() ? null : ownerName;
         clearMode = clearMode == null ? CoreClearMode.CLEAR : clearMode;
+        foundationMaterial = foundationMaterial == null ? CoreFoundationMaterial.COBBLESTONE : foundationMaterial;
         residents = sanitizeResidents(residents);
         upgradeFuelTicks = sanitizeUpgradeFuelTicks(upgradeFuelTicks);
     }
@@ -44,35 +47,39 @@ public record CoreStoredState(
     }
 
     public CoreStoredState withSize(int sizeX, int sizeY, int sizeBelowY, int sizeZ) {
-        return new CoreStoredState(baseName, coreUUID, ownerUUID, ownerName, activeStorageUUID, passwordEnabled, passwordHash, bound, initialized, sizeX, sizeY, sizeBelowY, sizeZ, clearMode, residents, upgradeFuelTicks);
+        return new CoreStoredState(baseName, coreUUID, ownerUUID, ownerName, activeStorageUUID, passwordEnabled, passwordHash, bound, initialized, sizeX, sizeY, sizeBelowY, sizeZ, clearMode, foundationEnabled, foundationMaterial, residents, upgradeFuelTicks);
     }
 
     public CoreStoredState withName(String name) {
-        return new CoreStoredState(name, coreUUID, ownerUUID, ownerName, activeStorageUUID, passwordEnabled, passwordHash, bound, initialized, sizeX, sizeY, sizeBelowY, sizeZ, clearMode, residents, upgradeFuelTicks);
+        return new CoreStoredState(name, coreUUID, ownerUUID, ownerName, activeStorageUUID, passwordEnabled, passwordHash, bound, initialized, sizeX, sizeY, sizeBelowY, sizeZ, clearMode, foundationEnabled, foundationMaterial, residents, upgradeFuelTicks);
     }
 
     public CoreStoredState withBinding(boolean bound, @Nullable UUID coreUuid) {
-        return new CoreStoredState(baseName, coreUuid == null ? coreUUID : coreUuid, ownerUUID, ownerName, activeStorageUUID, passwordEnabled, passwordHash, bound, initialized, sizeX, sizeY, sizeBelowY, sizeZ, clearMode, residents, upgradeFuelTicks);
+        return new CoreStoredState(baseName, coreUuid == null ? coreUUID : coreUuid, ownerUUID, ownerName, activeStorageUUID, passwordEnabled, passwordHash, bound, initialized, sizeX, sizeY, sizeBelowY, sizeZ, clearMode, foundationEnabled, foundationMaterial, residents, upgradeFuelTicks);
     }
 
     public CoreStoredState withInitialized(boolean initialized) {
-        return new CoreStoredState(baseName, coreUUID, ownerUUID, ownerName, activeStorageUUID, passwordEnabled, passwordHash, bound, initialized, sizeX, sizeY, sizeBelowY, sizeZ, clearMode, residents, upgradeFuelTicks);
+        return new CoreStoredState(baseName, coreUUID, ownerUUID, ownerName, activeStorageUUID, passwordEnabled, passwordHash, bound, initialized, sizeX, sizeY, sizeBelowY, sizeZ, clearMode, foundationEnabled, foundationMaterial, residents, upgradeFuelTicks);
     }
 
     public CoreStoredState withOwner(@Nullable UUID ownerUuid, @Nullable String ownerName) {
-        return new CoreStoredState(baseName, coreUUID, ownerUuid, ownerName, activeStorageUUID, passwordEnabled, passwordHash, bound, initialized, sizeX, sizeY, sizeBelowY, sizeZ, clearMode, residents, upgradeFuelTicks);
+        return new CoreStoredState(baseName, coreUUID, ownerUuid, ownerName, activeStorageUUID, passwordEnabled, passwordHash, bound, initialized, sizeX, sizeY, sizeBelowY, sizeZ, clearMode, foundationEnabled, foundationMaterial, residents, upgradeFuelTicks);
     }
 
     public CoreStoredState withActiveStorage(@Nullable UUID storageUuid) {
-        return new CoreStoredState(baseName, coreUUID, ownerUUID, ownerName, storageUuid, passwordEnabled, passwordHash, bound, initialized, sizeX, sizeY, sizeBelowY, sizeZ, clearMode, residents, upgradeFuelTicks);
+        return new CoreStoredState(baseName, coreUUID, ownerUUID, ownerName, storageUuid, passwordEnabled, passwordHash, bound, initialized, sizeX, sizeY, sizeBelowY, sizeZ, clearMode, foundationEnabled, foundationMaterial, residents, upgradeFuelTicks);
     }
 
     public CoreStoredState withPassword(boolean passwordEnabled, @Nullable String passwordHash) {
-        return new CoreStoredState(baseName, coreUUID, ownerUUID, ownerName, activeStorageUUID, passwordEnabled, passwordHash, bound, initialized, sizeX, sizeY, sizeBelowY, sizeZ, clearMode, residents, upgradeFuelTicks);
+        return new CoreStoredState(baseName, coreUUID, ownerUUID, ownerName, activeStorageUUID, passwordEnabled, passwordHash, bound, initialized, sizeX, sizeY, sizeBelowY, sizeZ, clearMode, foundationEnabled, foundationMaterial, residents, upgradeFuelTicks);
     }
 
     public CoreStoredState withClearMode(CoreClearMode clearMode) {
-        return new CoreStoredState(baseName, coreUUID, ownerUUID, ownerName, activeStorageUUID, passwordEnabled, passwordHash, bound, initialized, sizeX, sizeY, sizeBelowY, sizeZ, clearMode, residents, upgradeFuelTicks);
+        return new CoreStoredState(baseName, coreUUID, ownerUUID, ownerName, activeStorageUUID, passwordEnabled, passwordHash, bound, initialized, sizeX, sizeY, sizeBelowY, sizeZ, clearMode, foundationEnabled, foundationMaterial, residents, upgradeFuelTicks);
+    }
+
+    public CoreStoredState withFoundation(boolean foundationEnabled, CoreFoundationMaterial foundationMaterial) {
+        return new CoreStoredState(baseName, coreUUID, ownerUUID, ownerName, activeStorageUUID, passwordEnabled, passwordHash, bound, initialized, sizeX, sizeY, sizeBelowY, sizeZ, clearMode, foundationEnabled, foundationMaterial, residents, upgradeFuelTicks);
     }
 
     public boolean hasResident(@Nullable UUID playerUuid) {
@@ -80,11 +87,11 @@ public record CoreStoredState(
     }
 
     public CoreStoredState withResidents(Map<UUID, CoreResident> residents) {
-        return new CoreStoredState(baseName, coreUUID, ownerUUID, ownerName, activeStorageUUID, passwordEnabled, passwordHash, bound, initialized, sizeX, sizeY, sizeBelowY, sizeZ, clearMode, residents, upgradeFuelTicks);
+        return new CoreStoredState(baseName, coreUUID, ownerUUID, ownerName, activeStorageUUID, passwordEnabled, passwordHash, bound, initialized, sizeX, sizeY, sizeBelowY, sizeZ, clearMode, foundationEnabled, foundationMaterial, residents, upgradeFuelTicks);
     }
 
     public CoreStoredState withUpgradeFuelTicks(Map<CoreUpgrade, Integer> upgradeFuelTicks) {
-        return new CoreStoredState(baseName, coreUUID, ownerUUID, ownerName, activeStorageUUID, passwordEnabled, passwordHash, bound, initialized, sizeX, sizeY, sizeBelowY, sizeZ, clearMode, residents, upgradeFuelTicks);
+        return new CoreStoredState(baseName, coreUUID, ownerUUID, ownerName, activeStorageUUID, passwordEnabled, passwordHash, bound, initialized, sizeX, sizeY, sizeBelowY, sizeZ, clearMode, foundationEnabled, foundationMaterial, residents, upgradeFuelTicks);
     }
 
     public CoreStoredState addResident(UUID residentUuid, @Nullable String residentName) {

@@ -47,6 +47,8 @@ public final class CorePersistence {
         tag.putInt("SizeBelowY", state.sizeBelowY());
         tag.putInt("SizeZ", state.sizeZ());
         tag.putString("ClearMode", state.clearMode().name());
+        tag.putBoolean("FoundationEnabled", state.foundationEnabled());
+        tag.putString("FoundationMaterial", state.foundationMaterial().name());
         if (!state.residents().isEmpty()) {
             tag.put("Residents", serializeResidents(state.residents()));
         }
@@ -79,6 +81,10 @@ public final class CorePersistence {
         CoreClearMode clearMode = tag.contains("ClearMode")
                 ? CoreClearMode.fromName(tag.getString("ClearMode"))
                 : CoreClearMode.CLEAR;
+        boolean foundationEnabled = tag.contains("FoundationEnabled") && tag.getBoolean("FoundationEnabled");
+        CoreFoundationMaterial foundationMaterial = tag.contains("FoundationMaterial")
+                ? CoreFoundationMaterial.fromName(tag.getString("FoundationMaterial"))
+                : CoreFoundationMaterial.COBBLESTONE;
         Map<UUID, CoreResident> residents = tag.contains("Residents")
                 ? deserializeResidents(tag.getList("Residents", Tag.TAG_COMPOUND))
                 : tag.contains("Collaborators")
@@ -113,6 +119,8 @@ public final class CorePersistence {
                 sizeBelowY,
                 sizeZ,
                 clearMode,
+                foundationEnabled,
+                foundationMaterial,
                 residents,
                 upgradeFuelTicks
         );
@@ -165,6 +173,9 @@ public final class CorePersistence {
         tag.putInt("SizeBelowY", state.sizeBelowY());
         tag.putInt("SizeZ", state.sizeZ());
         tag.putString("ClearMode", state.clearMode().name());
+        tag.putBoolean("FoundationEnabled", state.foundationEnabled());
+        tag.putString("FoundationMaterial", state.foundationMaterial().name());
+        tag.putBoolean("HasInitialized", state.initialized());
         if (state.ownerName() != null) {
             tag.putString("OwnerName", state.ownerName());
         }

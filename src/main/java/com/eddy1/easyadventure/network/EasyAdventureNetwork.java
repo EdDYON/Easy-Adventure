@@ -56,6 +56,11 @@ public final class EasyAdventureNetwork {
                 .decoder(SubmitBaseNamePayload::decode)
                 .consumerMainThread(SubmitBaseNamePayload::handle)
                 .add();
+        CHANNEL.messageBuilder(PreviewCorePayload.class, id++, NetworkDirection.PLAY_TO_SERVER)
+                .encoder(PreviewCorePayload::encode)
+                .decoder(PreviewCorePayload::decode)
+                .consumerMainThread(PreviewCorePayload::handle)
+                .add();
     }
 
     public static <T> void sendToServer(T message) {

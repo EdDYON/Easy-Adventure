@@ -1,26 +1,42 @@
 package com.eddy1.easyadventure.block.core;
 
 import com.eddy1.easyadventure.block.BaseCoreBlock;
+import com.eddy1.easyadventure.block.BaseCoreBlockEntity;
 import com.eddy1.easyadventure.storage.StructureSnapshot;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Container;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import com.eddy1.easyadventure.util.SavedBlockInfo;
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.level.BlockEvent;
+import org.jetbrains.annotations.Nullable;
 
 public final class CorePreflight {
     private CorePreflight() {
     }
 
     public static CoreAreaCheckResult checkPacking(Level level, BlockPos center, CoreVolume volume) {
+        return checkPacking(level, center, volume, null);
+    }
+
+    public static CoreAreaCheckResult checkPacking(Level level, BlockPos center, CoreVolume volume, @Nullable ServerPlayer actor) {
         if (!hasAreaLoaded(level, center, volume)) {
             return new CoreAreaCheckResult(false, 0, 0, 1, 0, 0, 0, null, Component.translatable("message.easyadventure.precheck_chunks_unloaded"));
         }
         if (!isWithinBounds(level, center, volume)) {
             return new CoreAreaCheckResult(false, 0, 0, 1, 0, 0, 0, null, Component.translatable("message.easyadventure.precheck_world_bounds"));
+        }
+        if (level instanceof ServerLevel serverLevel) {
+            java.util.UUID exceptCoreUuid = level.getBlockEntity(center) instanceof BaseCoreBlockEntity core ? core.getCoreUUID() : null;
+            CoreTerritoryGuard.OverlapProblem overlapProblem = CoreTerritoryGuard.findOverlapProblem(serverLevel, center, volume, exceptCoreUuid);
+            if (overlapProblem != null) {
+                return new CoreAreaCheckResult(false, 0, 0, 1, 0, 0, 0, overlapProblem.pos(), overlapProblem.message());
+            }
         }
 
         int total = 0;
@@ -86,6 +102,21 @@ public final class CorePreflight {
                         continue;
                     }
 
+                    if (isBreakProtected(level, pos, state, actor)) {
+                        blocked++;
+                        if (reason == null) {
+                            blockedPos = pos;
+                            reason = Component.translatable(
+                                    "message.easyadventure.precheck_protected",
+                                    state.getBlock().getName(),
+                                    pos.getX(),
+                                    pos.getY(),
+                                    pos.getZ()
+                            );
+                        }
+                        continue;
+                    }
+
                     if (state.is(CoreCompat.CANNOT_PACK) || state.getDestroySpeed(level, pos) < 0) {
                         blocked++;
                         if (reason == null) {
@@ -117,12 +148,20 @@ public final class CorePreflight {
     }
 
     public static CoreAreaCheckResult checkDeployment(ServerLevel level, BlockPos center, StructureSnapshot snapshot) {
+        return checkDeployment(level, center, snapshot, null);
+    }
+
+    public static CoreAreaCheckResult checkDeployment(ServerLevel level, BlockPos center, StructureSnapshot snapshot, @Nullable ServerPlayer actor) {
         CoreVolume volume = new CoreVolume(snapshot.sizeX(), snapshot.sizeY(), snapshot.sizeBelowY(), snapshot.sizeZ());
         if (!hasAreaLoaded(level, center, volume)) {
             return new CoreAreaCheckResult(false, 0, 0, 1, snapshot.blockEntityCount(), 0, snapshot.entityCount(), null, Component.translatable("message.easyadventure.precheck_chunks_unloaded"));
         }
         if (!isWithinBounds(level, center, volume)) {
             return new CoreAreaCheckResult(false, 0, 0, 1, snapshot.blockEntityCount(), 0, snapshot.entityCount(), null, Component.translatable("message.easyadventure.precheck_world_bounds"));
+        }
+        CoreTerritoryGuard.OverlapProblem overlapProblem = CoreTerritoryGuard.findOverlapProblem(level, center, volume, null);
+        if (overlapProblem != null) {
+            return new CoreAreaCheckResult(false, 0, 0, 1, snapshot.blockEntityCount(), 0, snapshot.entityCount(), overlapProblem.pos(), overlapProblem.message());
         }
         SavedBlockInfo storedDangerous = firstDangerousStoredBlock(snapshot);
         if (storedDangerous != null) {
@@ -163,14 +202,16 @@ public final class CorePreflight {
                     }
 
                     occupied++;
+                    boolean breakProtected = isBreakProtected(level, pos, state, actor);
                     if (state.getBlock() instanceof BaseCoreBlock
                             || state.is(CoreCompat.DEPLOYMENT_BLOCKERS)
+                            || breakProtected
                             || state.getDestroySpeed(level, pos) < 0) {
                         blocked++;
                         if (reason == null) {
                             blockedPos = pos;
                             reason = Component.translatable(
-                                    "message.easyadventure.precheck_blocked",
+                                    breakProtected ? "message.easyadventure.precheck_protected" : "message.easyadventure.precheck_blocked",
                                     state.getBlock().getName(),
                                     pos.getX(),
                                     pos.getY(),
@@ -222,5 +263,13 @@ public final class CorePreflight {
             }
         }
         return null;
+    }
+
+    private static boolean isBreakProtected(Level level, BlockPos pos, BlockState state, @Nullable ServerPlayer actor) {
+        if (actor == null || state.isAir()) {
+            return false;
+        }
+        BlockEvent.BreakEvent event = new BlockEvent.BreakEvent(level, pos, state, actor);
+        return MinecraftForge.EVENT_BUS.post(event) || event.isCanceled();
     }
 }

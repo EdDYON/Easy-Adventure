@@ -15,7 +15,7 @@ import net.minecraft.world.item.ItemStack;
 
 public class CoreSizeMenu extends AbstractContainerMenu {
     private static final int HOTBAR_X = 121;
-    private static final int HOTBAR_Y = 194;
+    private static final int HOTBAR_Y = 242;
 
     private final BlockPos pos;
     private final boolean sizeLocked;

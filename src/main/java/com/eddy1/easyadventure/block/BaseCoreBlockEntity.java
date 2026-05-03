@@ -5,6 +5,7 @@ import com.eddy1.easyadventure.block.core.CoreAccessControl;
 import com.eddy1.easyadventure.block.core.CoreAreaCheckResult;
 import com.eddy1.easyadventure.block.core.CoreEffects;
 import com.eddy1.easyadventure.block.core.CoreEntityTransport;
+import com.eddy1.easyadventure.block.core.CoreFoundationMaterial;
 import com.eddy1.easyadventure.block.core.CoreLifecycle;
 import com.eddy1.easyadventure.block.core.CorePackager;
 import com.eddy1.easyadventure.block.core.CorePasswordUtil;
@@ -19,6 +20,7 @@ import com.eddy1.easyadventure.block.core.CoreRuntimeState;
 import com.eddy1.easyadventure.block.core.CoreStoredState;
 import com.eddy1.easyadventure.block.core.CoreStructureWorkspace;
 import com.eddy1.easyadventure.block.core.CoreTerrainTracker;
+import com.eddy1.easyadventure.block.core.CoreTerritoryGuard;
 import com.eddy1.easyadventure.block.core.CoreUpgrade;
 import com.eddy1.easyadventure.block.core.CoreValidation;
 import com.eddy1.easyadventure.block.core.CoreVolume;
@@ -27,6 +29,7 @@ import com.eddy1.easyadventure.storage.StructureSnapshot;
 import com.eddy1.easyadventure.util.BlockPlacementUtil;
 import com.eddy1.easyadventure.util.SavedBlockInfo;
 import com.eddy1.easyadventure.world.BaseRegistryData;
+import com.eddy1.easyadventure.world.BaseOperationLogData;
 import com.eddy1.easyadventure.world.BuildingStorageData;
 import com.eddy1.easyadventure.world.TerritoryManager;
 import net.minecraft.ChatFormatting;
@@ -92,7 +95,7 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
     private final CoreTerrainTracker terrainTracker = new CoreTerrainTracker();
     private final NonNullList<ItemStack> upgradeFuelInventory = NonNullList.withSize(CoreUpgrade.values().length, ItemStack.EMPTY);
 
-    private CoreStoredState storedState = new CoreStoredState(DEFAULT_BASE_NAME, UUID.randomUUID(), null, null, null, false, null, false, false, 9, 5, 0, 9, CoreClearMode.CLEAR, Map.of(), Map.of());
+    private CoreStoredState storedState = new CoreStoredState(DEFAULT_BASE_NAME, UUID.randomUUID(), null, null, null, false, null, false, false, 9, 5, 0, 9, CoreClearMode.CLEAR, false, CoreFoundationMaterial.COBBLESTONE, Map.of(), Map.of());
     private State persistedRuntimeState = State.IDLE;
 
     public BaseCoreBlockEntity(BlockPos pos, BlockState blockState) {
@@ -226,6 +229,14 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
 
     public CoreClearMode getClearMode() {
         return storedState.clearMode();
+    }
+
+    public boolean isFoundationEnabled() {
+        return storedState.foundationEnabled();
+    }
+
+    public CoreFoundationMaterial getFoundationMaterial() {
+        return storedState.foundationMaterial();
     }
 
     public boolean isPasswordEnabled() {
@@ -390,7 +401,8 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
                 name,
                 null,
                 serverLevel.dimension().location(),
-                worldPosition
+                worldPosition,
+                currentVolume()
         );
         notifyPlayer(player, Component.translatable("message.easyadventure.base_name_saved", name));
         return true;
@@ -404,6 +416,8 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
             int newZ,
             @Nullable String rawBaseName,
             CoreClearMode clearMode,
+            boolean foundationEnabled,
+            CoreFoundationMaterial foundationMaterial,
             boolean passwordEnabled,
             @Nullable String rawPassword
     ) {
@@ -423,20 +437,64 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
             return false;
         }
 
+        boolean firstSetup = !storedState.initialized();
         String requestedBaseName = BaseRegistryData.normalizeDisplayName(rawBaseName == null ? "" : rawBaseName);
         String currentBaseName = BaseRegistryData.normalizeDisplayName(getBaseName());
-        if (!requestedBaseName.isBlank() && !requestedBaseName.equals(currentBaseName)) {
+        if (requestedBaseName.isBlank()) {
+            notifyPlayer(player, "message.easyadventure.base_name_required");
+            return false;
+        }
+        if (firstSetup) {
+            if (runtime.isBusy()) {
+                notifyPlayer(player, "message.easyadventure.core_busy");
+                return false;
+            }
+
+            CoreVolume requestedVolume = new CoreVolume(
+                    clamp(newX, MIN_SIZE_XZ, MAX_SIZE_XZ),
+                    clamp(newY, MIN_SIZE_Y, MAX_SIZE_Y),
+                    clamp(newBelowY, MIN_SIZE_BELOW_Y, MAX_SIZE_BELOW_Y),
+                    clamp(newZ, MIN_SIZE_XZ, MAX_SIZE_XZ)
+            );
+            Component sizeProblem = CoreTerritoryGuard.validateSize(player, requestedVolume);
+            if (sizeProblem != null) {
+                notifyPlayer(player, sizeProblem);
+                logOperation(player, "create", "failed", "size_limit");
+                return false;
+            }
+            if (level instanceof ServerLevel serverLevel) {
+                CoreTerritoryGuard.OverlapProblem overlapProblem = CoreTerritoryGuard.findOverlapProblem(serverLevel, worldPosition, requestedVolume, storedState.coreUUID());
+                if (overlapProblem != null) {
+                    notifyPlayer(player, overlapProblem.message());
+                    logOperation(player, "create", "failed", "overlap");
+                    return false;
+                }
+            }
+        }
+        if (firstSetup || !requestedBaseName.equals(currentBaseName)) {
             if (!renameBase(player, requestedBaseName)) {
                 return false;
             }
         }
 
-        if (clearMode != storedState.clearMode()) {
-            applyStoredState(storedState.withClearMode(clearMode));
+        CoreClearMode effectiveClearMode = firstSetup ? clearMode : storedState.clearMode();
+        boolean effectiveFoundationEnabled = firstSetup
+                ? effectiveClearMode == CoreClearMode.CLEAR && foundationEnabled
+                : storedState.foundationEnabled();
+        CoreFoundationMaterial effectiveFoundationMaterial = firstSetup ? foundationMaterial : storedState.foundationMaterial();
+
+        if (effectiveClearMode != storedState.clearMode()
+                || effectiveFoundationEnabled != storedState.foundationEnabled()
+                || effectiveFoundationMaterial != storedState.foundationMaterial()) {
+            applyStoredState(storedState.withClearMode(effectiveClearMode).withFoundation(effectiveFoundationEnabled, effectiveFoundationMaterial));
             setChanged();
             if (level != null) {
                 level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), Block.UPDATE_CLIENTS);
             }
+        }
+
+        if (!firstSetup) {
+            return true;
         }
 
         return initializeFoundation(player, newX, newY, newBelowY, newZ);
@@ -491,8 +549,27 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
         int oldZ = storedState.sizeZ();
         boolean firstInitialization = !storedState.initialized();
 
-        if (!firstInitialization && oldX == clampedX && oldY == clampedY && oldBelowY == clampedBelowY && oldZ == clampedZ) {
-            return true;
+        if (!firstInitialization) {
+            notifyPlayer(player, "message.easyadventure.size_locked_after_create");
+            logOperation(player, "resize", "failed", "locked");
+            return false;
+        }
+
+        CoreVolume nextVolume = new CoreVolume(clampedX, clampedY, clampedBelowY, clampedZ);
+        Component sizeProblem = CoreTerritoryGuard.validateSize(player, nextVolume);
+        if (sizeProblem != null) {
+            notifyPlayer(player, sizeProblem);
+            logOperation(player, "create", "failed", "size_limit");
+            return false;
+        }
+
+        if (level instanceof ServerLevel serverLevel) {
+            CoreTerritoryGuard.OverlapProblem overlapProblem = CoreTerritoryGuard.findOverlapProblem(serverLevel, worldPosition, nextVolume, storedState.coreUUID());
+            if (overlapProblem != null) {
+                notifyPlayer(player, overlapProblem.message());
+                logOperation(player, "create", "failed", "overlap");
+                return false;
+            }
         }
 
         if (player != null) {
@@ -502,6 +579,18 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
         setChanged();
         if (level instanceof ServerLevel serverLevel) {
             TerritoryManager.refresh(serverLevel, this);
+            if (storedState.ownerUUID() != null) {
+                BaseRegistryData.get(serverLevel).registerPlaced(
+                        storedState.coreUUID(),
+                        storedState.ownerUUID(),
+                        storedState.ownerName(),
+                        storedState.baseName(),
+                        null,
+                        serverLevel.dimension().location(),
+                        worldPosition,
+                        currentVolume()
+                );
+            }
         }
 
         if (level != null) {
@@ -514,6 +603,7 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
         }
 
         startSmartResizeTask(oldX, oldY, oldBelowY, oldZ, getSizeX(), getSizeY(), getSizeBelowY(), getSizeZ(), firstInitialization);
+        logOperation(player, firstInitialization ? "create" : "resize", "success", currentVolume().blockWidthX() + "x" + currentVolume().totalHeight() + "x" + currentVolume().blockWidthZ());
         return true;
     }
 
@@ -564,6 +654,13 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
         if (runtime.isBusy() || CoreValidation.containsNestedCore(snapshot)) {
             return false;
         }
+        if (level instanceof ServerLevel serverLevel) {
+            CoreVolume volume = new CoreVolume(snapshot.sizeX(), snapshot.sizeY(), snapshot.sizeBelowY(), snapshot.sizeZ());
+            CoreTerritoryGuard.OverlapProblem overlapProblem = CoreTerritoryGuard.findOverlapProblem(serverLevel, worldPosition, volume, null);
+            if (overlapProblem != null) {
+                return false;
+            }
+        }
 
         applyStoredState(storedState
                 .withSize(snapshot.sizeX(), snapshot.sizeY(), snapshot.sizeBelowY(), snapshot.sizeZ())
@@ -573,6 +670,7 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
                 .withOwner(ownerUUID, ownerName)
                 .withPassword(passwordEnabled, passwordHash)
                 .withClearMode(clearMode)
+                .withFoundation(false, storedState.foundationMaterial())
                 .withActiveStorage(storageUUID)
                 .withResidents(residents)
                 .withUpgradeFuelTicks(upgradeFuelTicks));
@@ -683,10 +781,12 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
     public boolean startPacking(@Nullable Player player, @Nullable String password) {
         if (runtime.isBusy()) {
             notifyPlayer(player, "message.easyadventure.core_busy");
+            logOperation(player, "pack", "failed", "busy");
             return false;
         }
         if (!canPlayerOperate(player, password)) {
             notifyPlayer(player, storedState.passwordEnabled() ? "message.easyadventure.password_incorrect" : "message.easyadventure.not_authorized_operation");
+            logOperation(player, "pack", "failed", "access_denied");
             return false;
         }
         if (player != null) {
@@ -703,12 +803,14 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
                         nestedCorePos.getY(),
                         nestedCorePos.getZ()
                 ));
+                logOperation(player, "pack", "failed", "nested_core");
                 return false;
             }
 
-            CoreAreaCheckResult check = CorePreflight.checkPacking(level, worldPosition, currentVolume());
+            CoreAreaCheckResult check = CorePreflight.checkPacking(level, worldPosition, currentVolume(), player instanceof ServerPlayer serverPlayer ? serverPlayer : null);
             if (!check.ok()) {
                 notifyPlayer(player, check.reason());
+                logOperation(player, "pack", "failed", "preflight");
                 return false;
             }
         }
@@ -721,6 +823,7 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
         if (level != null) {
             level.playSound(null, worldPosition, SoundEvents.RESPAWN_ANCHOR_CHARGE, SoundSource.BLOCKS, 1.0F, 0.5F);
         }
+        logOperation(player, "pack", "started", currentVolume().blockWidthX() + "x" + currentVolume().totalHeight() + "x" + currentVolume().blockWidthZ());
         return true;
     }
 
@@ -806,13 +909,6 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
     }
 
     private void startDeployment() {
-        if (storedState.clearMode() == CoreClearMode.KEEP) {
-            if (level != null) {
-                level.playSound(null, worldPosition, SoundEvents.BEACON_DEACTIVATE, SoundSource.BLOCKS, 2.0F, 0.5F);
-            }
-            startBuildingPhase();
-            return;
-        }
         CoreLifecycle.startDeployment(runtime, worldPosition, currentVolume());
         setChanged();
         if (level != null) {
@@ -854,7 +950,7 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
         if (level == null) {
             return;
         }
-        CorePhaseProcessor.processGenerating(level, worldPosition, currentVolume(), terrainTracker, pos, storedState.clearMode(), this::captureBlockEntityData);
+        CorePhaseProcessor.processGenerating(level, worldPosition, currentVolume(), terrainTracker, pos, storedState.clearMode(), storedState.foundationEnabled(), storedState.foundationMaterial(), this::captureBlockEntityData);
     }
 
     private void processClearing(BlockPos pos) {
@@ -932,6 +1028,7 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
                 storedState.upgradeFuelTicks(),
                 queuedUpgradeFuelCounts
         );
+        logOperation(null, "pack", "success", "stored");
     }
 
     private void finishDeployment() {
@@ -944,9 +1041,25 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
 
         runtime.finish();
         workspace.clearIncoming();
-        applyStoredState(storedState.withActiveStorage(null));
+        applyStoredState(storedState.withActiveStorage(null).withFoundation(false, storedState.foundationMaterial()));
         setChanged();
         performCelebration();
+        logOperation(null, "deploy", "success", "restored");
+    }
+
+    private void logOperation(@Nullable Player actor, String action, String result, String detail) {
+        if (!(level instanceof ServerLevel serverLevel)) {
+            return;
+        }
+        BaseOperationLogData.get(serverLevel).log(
+                actor,
+                storedState.coreUUID(),
+                storedState.baseName(),
+                action,
+                result,
+                detail,
+                serverLevel.dimension().location()
+        );
     }
 
     private void captureEntitiesWithinBounds() {
@@ -1039,6 +1152,8 @@ public class BaseCoreBlockEntity extends net.minecraft.world.level.block.entity.
                 clamp(nextState.sizeBelowY(), MIN_SIZE_BELOW_Y, MAX_SIZE_BELOW_Y),
                 clamp(nextState.sizeZ(), MIN_SIZE_XZ, MAX_SIZE_XZ),
                 nextState.clearMode(),
+                nextState.foundationEnabled(),
+                nextState.foundationMaterial(),
                 nextState.residents(),
                 nextState.upgradeFuelTicks()
         );

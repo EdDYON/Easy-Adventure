@@ -1,9 +1,11 @@
 package com.eddy1.easyadventure.command;
 
 import com.eddy1.easyadventure.block.BaseCoreBlockEntity;
+import com.eddy1.easyadventure.world.BaseOperationLogData;
 import com.eddy1.easyadventure.world.BaseRecallService;
 import com.eddy1.easyadventure.world.BaseRegistryData;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
@@ -52,7 +54,11 @@ public final class EasyAdventureCommands {
                                 .then(Commands.argument("player", EntityArgument.player())
                                         .then(Commands.argument("pos", BlockPosArgument.blockPos())
                                                 .then(Commands.argument("base_name", StringArgumentType.greedyString())
-                                                        .executes(EasyAdventureCommands::claimPlaced)))))));
+                                                        .executes(EasyAdventureCommands::claimPlaced)))))
+                        .then(Commands.literal("operation_log")
+                                .executes(context -> showOperationLog(context, 10))
+                                .then(Commands.argument("limit", IntegerArgumentType.integer(1, 50))
+                                        .executes(context -> showOperationLog(context, IntegerArgumentType.getInteger(context, "limit")))))));
     }
 
     private static int listBases(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
@@ -117,5 +123,27 @@ public final class EasyAdventureCommands {
 
         context.getSource().sendSuccess(() -> Component.translatable("command.easyadventure.claim_placed.success", player.getGameProfile().getName(), baseName, pos.getX(), pos.getY(), pos.getZ()), true);
         return 1;
+    }
+
+    private static int showOperationLog(CommandContext<CommandSourceStack> context, int limit) {
+        ServerLevel level = context.getSource().getLevel();
+        List<BaseOperationLogData.Record> records = BaseOperationLogData.get(level).recent(limit);
+        if (records.isEmpty()) {
+            context.getSource().sendFailure(Component.translatable("command.easyadventure.operation_log.empty"));
+            return 0;
+        }
+
+        context.getSource().sendSuccess(() -> Component.translatable("command.easyadventure.operation_log.header", records.size()), false);
+        for (BaseOperationLogData.Record record : records) {
+            context.getSource().sendSuccess(() -> Component.translatable(
+                    "command.easyadventure.operation_log.entry",
+                    record.actorName(),
+                    record.baseName(),
+                    record.action(),
+                    record.result(),
+                    record.detail()
+            ), false);
+        }
+        return records.size();
     }
 }

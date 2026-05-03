@@ -28,6 +28,8 @@ public final class CorePhaseProcessor {
             CoreTerrainTracker terrainTracker,
             BlockPos pos,
             CoreClearMode clearMode,
+            boolean foundationEnabled,
+            CoreFoundationMaterial foundationMaterial,
             Function<BlockPos, @Nullable CompoundTag> captureBlockEntityData
     ) {
         int relativeY = pos.getY() - center.getY();
@@ -37,13 +39,19 @@ public final class CorePhaseProcessor {
         }
 
         BlockState state = level.getBlockState(pos);
-        if (state.getDestroySpeed(level, pos) < 0) {
+        if ((state.getBlock() instanceof BaseCoreBlock && !pos.equals(center))
+                || CoreCompat.isDangerousToPack(state, level.getBlockEntity(pos))
+                || state.getDestroySpeed(level, pos) < 0) {
             return;
         }
 
         if (relativeY == 0) {
+            if (!foundationEnabled) {
+                return;
+            }
+
             terrainTracker.remember(center, pos, state, captureBlockEntityData.apply(pos));
-            BlockState foundationState = foundationStateFor(center, volume, pos);
+            BlockState foundationState = foundationStateFor(center, volume, pos, foundationMaterial);
             if (!state.equals(foundationState)) {
                 BlockPlacementUtil.replaceForCapture(level, pos, foundationState);
                 if (level instanceof ServerLevel serverLevel) {
@@ -76,7 +84,10 @@ public final class CorePhaseProcessor {
         }
 
         BlockState state = level.getBlockState(pos);
-        if (state.getDestroySpeed(level, pos) < 0 || state.isAir()) {
+        if ((state.getBlock() instanceof BaseCoreBlock && !pos.equals(center))
+                || CoreCompat.isDangerousToPack(state, level.getBlockEntity(pos))
+                || state.getDestroySpeed(level, pos) < 0
+                || state.isAir()) {
             return;
         }
 
@@ -147,24 +158,15 @@ public final class CorePhaseProcessor {
         BlockPlacementUtil.loadBlockEntity(level, targetPos, tag);
     }
 
-    private static BlockState foundationStateFor(BlockPos center, CoreVolume volume, BlockPos pos) {
+    private static BlockState foundationStateFor(BlockPos center, CoreVolume volume, BlockPos pos, CoreFoundationMaterial material) {
         int relativeX = pos.getX() - center.getX();
         int relativeZ = pos.getZ() - center.getZ();
         boolean edge = Math.abs(relativeX) == volume.halfX() || Math.abs(relativeZ) == volume.halfZ();
-        int roll = Math.floorMod(relativeX * 31 + relativeZ * 17, 16);
+        if (!edge) {
+            return material.blockState();
+        }
 
-        if (edge) {
-            return roll % 5 == 0 ? Blocks.STONE_BRICKS.defaultBlockState() : Blocks.COBBLESTONE.defaultBlockState();
-        }
-        if (roll < 7) {
-            return Blocks.COBBLESTONE.defaultBlockState();
-        }
-        if (roll < 11) {
-            return Blocks.STONE.defaultBlockState();
-        }
-        if (roll < 14) {
-            return Blocks.ANDESITE.defaultBlockState();
-        }
-        return Blocks.STONE_BRICKS.defaultBlockState();
+        int roll = Math.floorMod(relativeX * 31 + relativeZ * 17, 16);
+        return roll % 5 == 0 ? Blocks.STONE_BRICKS.defaultBlockState() : material.blockState();
     }
 }

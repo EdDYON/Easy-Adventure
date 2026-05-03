@@ -30,7 +30,7 @@ public final class CoreTerrainTracker {
     public void restore(Level level, BlockPos center, BlockPos pos) {
         BlockPos relativePos = pos.subtract(center);
         SavedBlockInfo info = originalBlocks.get(relativePos);
-        BlockState restoreState = info != null ? info.state() : (relativePos.getY() <= 0 ? Blocks.DIRT.defaultBlockState() : Blocks.AIR.defaultBlockState());
+        BlockState restoreState = info != null ? info.state() : Blocks.AIR.defaultBlockState();
         CompoundTag restoreNbt = info == null || info.nbt() == null ? null : info.nbt().copy();
 
         if (level.getBlockEntity(pos) != null) {

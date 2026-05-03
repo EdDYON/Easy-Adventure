@@ -2,12 +2,14 @@ package com.eddy1.easyadventure.client.screen;
 
 import com.eddy1.easyadventure.block.BaseCoreBlockEntity;
 import com.eddy1.easyadventure.block.core.CoreClearMode;
+import com.eddy1.easyadventure.block.core.CoreFoundationMaterial;
 import com.eddy1.easyadventure.block.core.CorePasswordUtil;
 import com.eddy1.easyadventure.block.core.CorePermission;
 import com.eddy1.easyadventure.block.core.CoreResident;
 import com.eddy1.easyadventure.block.core.CoreUpgrade;
 import com.eddy1.easyadventure.menu.CoreSizeMenu;
 import com.eddy1.easyadventure.network.EasyAdventureNetwork;
+import com.eddy1.easyadventure.network.PreviewCorePayload;
 import com.eddy1.easyadventure.network.UpdateCoreResidentPayload;
 import com.eddy1.easyadventure.network.UpdateCoreSizePayload;
 import com.eddy1.easyadventure.network.UpdateResidentPermissionPayload;
@@ -18,6 +20,7 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
@@ -38,10 +41,10 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
     private static final int MAIN_X = 16;
     private static final int MAIN_Y = 48;
     private static final int MAIN_W = 372;
-    private static final int MAIN_H = 126;
+    private static final int MAIN_H = 174;
 
     private static final int HOTBAR_X = 118;
-    private static final int HOTBAR_Y = 188;
+    private static final int HOTBAR_Y = 236;
     private static final int HOTBAR_W = 168;
     private static final int HOTBAR_H = 30;
 
@@ -50,7 +53,7 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
     private static final int GENERAL_CARD_Y = 56;
     private static final int GENERAL_LEFT_W = 160;
     private static final int GENERAL_RIGHT_W = 178;
-    private static final int GENERAL_CARD_H = 110;
+    private static final int GENERAL_CARD_H = 162;
 
     private static final int RESIDENTS_LEFT_X = 24;
     private static final int RESIDENTS_RIGHT_X = 188;
@@ -87,9 +90,13 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
     private Button pageGeneralButton;
     private Button pageResidentsButton;
     private Button pageUpgradesButton;
+    private Button foundationToggleButton;
+    private Button foundationMaterialButton;
     private Button passwordToggleButton;
     private Button clearModeButton;
     private Button applyButton;
+    private Button setupBackButton;
+    private Button preflightButton;
     private Button residentPickerButton;
     private Button residentCandidatePreviousButton;
     private Button residentCandidateNextButton;
@@ -100,8 +107,11 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
     private final Button[] residentButtons = new Button[RESIDENTS_PER_PAGE];
     private final Button[] permissionButtons = new Button[CorePermission.values().length];
     private boolean passwordEnabled;
+    private boolean foundationEnabled = true;
+    private CoreFoundationMaterial foundationMaterial = CoreFoundationMaterial.COBBLESTONE;
     private CoreClearMode clearMode = CoreClearMode.CLEAR;
     private Page currentPage = Page.GENERAL;
+    private SetupStep setupStep = SetupStep.NAME;
     private int residentPage;
     private @Nullable UUID selectedResidentUuid;
     private @Nullable UUID selectedCandidateUuid;
@@ -109,7 +119,7 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
     public CoreSizeScreen(CoreSizeMenu menu, Inventory playerInventory, Component title) {
         super(menu, playerInventory, title);
         this.imageWidth = 404;
-        this.imageHeight = 236;
+        this.imageHeight = 278;
         this.inventoryLabelY = 10000;
     }
 
@@ -122,7 +132,13 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
         int sizeY = core != null ? core.getSizeY() : 5;
         int sizeBelowY = core != null ? core.getSizeBelowY() : 0;
         int sizeZ = core != null ? core.getSizeZ() : 9;
-        String baseName = core != null ? core.getBaseName() : BaseCoreBlockEntity.DEFAULT_BASE_NAME;
+        boolean initialSetup = isInitialSetup(core);
+        String baseName = core != null ? core.getBaseName() : "";
+        if (initialSetup && BaseCoreBlockEntity.DEFAULT_BASE_NAME.equals(baseName)) {
+            baseName = "";
+        }
+        foundationEnabled = core == null || core.isFoundationEnabled();
+        foundationMaterial = core != null ? core.getFoundationMaterial() : CoreFoundationMaterial.COBBLESTONE;
         clearMode = core != null ? core.getClearMode() : CoreClearMode.CLEAR;
         passwordEnabled = menu.isPasswordEnabled();
 
@@ -142,36 +158,60 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
                 .size(TAB_W, TAB_H)
                 .build();
 
-        xEdit = createNumberBox(left + 118, top + 68, sizeX, !menu.isSizeLocked());
-        yEdit = createNumberBox(left + 118, top + 92, sizeY, !menu.isSizeLocked());
-        downYEdit = createNumberBox(left + 118, top + 116, sizeBelowY, !menu.isSizeLocked());
-        zEdit = createNumberBox(left + 118, top + 140, sizeZ, !menu.isSizeLocked());
+        boolean sizeEditable = initialSetup && !menu.isSizeLocked();
+        xEdit = createNumberBox(left + 118, top + 68, sizeX, sizeEditable);
+        yEdit = createNumberBox(left + 118, top + 92, sizeY, sizeEditable);
+        downYEdit = createNumberBox(left + 118, top + 116, sizeBelowY, sizeEditable);
+        zEdit = createNumberBox(left + 118, top + 140, sizeZ, sizeEditable);
 
-        baseNameEdit = new EditBox(this.font, left + 220, top + 72, 146, 18, Component.empty());
+        baseNameEdit = new EditBox(this.font, left + 220, top + 76, 146, 18, Component.empty());
         baseNameEdit.setMaxLength(64);
         baseNameEdit.setValue(baseName);
+        baseNameEdit.setHint(Component.translatable("gui.easyadventure.base_name_hint_short"));
         baseNameEdit.setFilter(input -> input.indexOf('\n') < 0 && input.indexOf('\r') < 0 && input.length() <= 64);
 
         clearModeButton = Button.builder(Component.empty(), button -> toggleClearMode())
-                .pos(left + 220, top + 96)
+                .pos(left + 220, top + 102)
                 .size(146, 20)
                 .build();
         refreshClearModeLabel();
 
+        foundationToggleButton = Button.builder(Component.empty(), button -> toggleFoundation())
+                .pos(left + 220, top + 128)
+                .size(146, 20)
+                .build();
+        refreshFoundationLabel();
+
+        foundationMaterialButton = Button.builder(Component.empty(), button -> cycleFoundationMaterial())
+                .pos(left + 220, top + 154)
+                .size(146, 20)
+                .build();
+        refreshFoundationMaterialLabel();
+
         passwordToggleButton = Button.builder(Component.empty(), button -> togglePassword())
-                .pos(left + 220, top + 120)
+                .pos(left + 220, top + 128)
                 .size(146, 20)
                 .build();
         refreshToggleLabel();
 
-        passwordEdit = new EditBox(this.font, left + 220, top + 144, 74, 18, Component.empty());
+        passwordEdit = new EditBox(this.font, left + 220, top + 154, 74, 18, Component.empty());
         passwordEdit.setMaxLength(CorePasswordUtil.MAX_PASSWORD_LENGTH);
         passwordEdit.setHint(Component.empty());
         passwordEdit.setFilter(input -> input.indexOf('\n') < 0 && input.indexOf('\r') < 0 && input.length() <= CorePasswordUtil.MAX_PASSWORD_LENGTH);
 
         applyButton = Button.builder(Component.translatable("button.easyadventure.apply"), button -> save())
-                .pos(left + 300, top + 143)
+                .pos(left + 300, top + 153)
                 .size(66, 20)
+                .build();
+
+        setupBackButton = Button.builder(Component.translatable("button.easyadventure.back"), button -> previousSetupStep())
+                .pos(left + 220, top + 176)
+                .size(66, 20)
+                .build();
+
+        preflightButton = Button.builder(Component.translatable("button.easyadventure.safety_report"), button -> requestSafetyReport())
+                .pos(left + 220, top + 150)
+                .size(146, 20)
                 .build();
 
         residentPickerButton = Button.builder(Component.empty(), button -> {
@@ -232,8 +272,12 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
         addRenderableWidget(zEdit);
         addRenderableWidget(baseNameEdit);
         addRenderableWidget(clearModeButton);
+        addRenderableWidget(foundationToggleButton);
+        addRenderableWidget(foundationMaterialButton);
         addRenderableWidget(passwordToggleButton);
         addRenderableWidget(passwordEdit);
+        addRenderableWidget(setupBackButton);
+        addRenderableWidget(preflightButton);
         addRenderableWidget(applyButton);
         addRenderableWidget(residentPickerButton);
         addRenderableWidget(residentCandidatePreviousButton);
@@ -326,16 +370,58 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
     }
 
     private void renderGeneralPage(GuiGraphics guiGraphics) {
+        if (isInitialSetup()) {
+            renderSetupWizardPage(guiGraphics);
+            return;
+        }
+
         int left = screenLeft();
         int top = screenTop();
+        int baseNameLabelY = GENERAL_CARD_Y + 8;
 
         drawTrimmed(guiGraphics, Component.translatable("gui.easyadventure.size_x"), left + GENERAL_LEFT_X + 10, top + GENERAL_CARD_Y + 20, 56, COLOR_TEXT);
         drawTrimmed(guiGraphics, Component.translatable("gui.easyadventure.size_y"), left + GENERAL_LEFT_X + 10, top + GENERAL_CARD_Y + 44, 56, COLOR_TEXT);
         drawTrimmed(guiGraphics, Component.translatable("gui.easyadventure.size_y_below"), left + GENERAL_LEFT_X + 10, top + GENERAL_CARD_Y + 68, 56, COLOR_TEXT);
         drawTrimmed(guiGraphics, Component.translatable("gui.easyadventure.size_z"), left + GENERAL_LEFT_X + 10, top + GENERAL_CARD_Y + 92, 56, COLOR_TEXT);
-        drawTrimmed(guiGraphics, Component.translatable("gui.easyadventure.base_name"), left + GENERAL_RIGHT_X + 10, top + GENERAL_CARD_Y + 10, 96, COLOR_TEXT);
-        drawTrimmed(guiGraphics, Component.translatable("gui.easyadventure.clear_mode"), left + GENERAL_RIGHT_X + 10, top + GENERAL_CARD_Y + 34, 96, COLOR_TEXT);
-        drawTrimmed(guiGraphics, Component.translatable("gui.easyadventure.password"), left + GENERAL_RIGHT_X + 10, top + GENERAL_CARD_Y + 58, 96, COLOR_TEXT);
+        drawWrapped(guiGraphics, Component.translatable("gui.easyadventure.size_locked"), left + GENERAL_LEFT_X + 10, top + GENERAL_CARD_Y + 124, 136, COLOR_MUTED);
+        drawTrimmed(guiGraphics, Component.translatable("gui.easyadventure.base_name"), left + GENERAL_RIGHT_X + 22, top + baseNameLabelY, 146, COLOR_TEXT);
+        drawTrimmed(guiGraphics, Component.translatable("gui.easyadventure.clear_mode"), left + GENERAL_RIGHT_X + 22, top + GENERAL_CARD_Y + 34, 146, COLOR_TEXT);
+        drawTrimmed(guiGraphics, Component.translatable("gui.easyadventure.password"), left + GENERAL_RIGHT_X + 22, top + GENERAL_CARD_Y + 60, 146, COLOR_TEXT);
+    }
+
+    private void renderSetupWizardPage(GuiGraphics guiGraphics) {
+        int left = screenLeft();
+        int top = screenTop();
+        int leftContentX = left + GENERAL_LEFT_X + 10;
+        int rightContentX = left + GENERAL_RIGHT_X + 22;
+        int cardTop = top + GENERAL_CARD_Y;
+        drawSetupProgress(guiGraphics, leftContentX, cardTop + 10);
+        drawTrimmed(guiGraphics, Component.translatable(setupStep.titleKey), rightContentX, cardTop + 12, 146, COLOR_TEXT);
+
+        switch (setupStep) {
+            case NAME -> {
+                drawWrapped(guiGraphics, Component.translatable("gui.easyadventure.setup_name_hint"), leftContentX, cardTop + 48, 136, COLOR_MUTED);
+                drawTrimmed(guiGraphics, Component.translatable("gui.easyadventure.base_name"), rightContentX, cardTop + 40, 146, COLOR_TEXT);
+            }
+            case SIZE -> {
+                drawTrimmed(guiGraphics, Component.translatable("gui.easyadventure.size_x"), leftContentX, cardTop + 48, 56, COLOR_TEXT);
+                drawTrimmed(guiGraphics, Component.translatable("gui.easyadventure.size_y"), leftContentX, cardTop + 72, 56, COLOR_TEXT);
+                drawTrimmed(guiGraphics, Component.translatable("gui.easyadventure.size_y_below"), leftContentX, cardTop + 96, 56, COLOR_TEXT);
+                drawTrimmed(guiGraphics, Component.translatable("gui.easyadventure.size_z"), leftContentX, cardTop + 120, 56, COLOR_TEXT);
+                drawWrapped(guiGraphics, Component.translatable("gui.easyadventure.setup_size_hint"), rightContentX, cardTop + 44, 138, COLOR_MUTED);
+            }
+            case TERRAIN -> {
+                drawWrapped(guiGraphics, Component.translatable("gui.easyadventure.setup_terrain_hint"), leftContentX, cardTop + 48, 136, COLOR_MUTED);
+            }
+            case REVIEW -> {
+                int rowY = cardTop + 48;
+                rowY = drawSetupSummaryRow(guiGraphics, Component.translatable("gui.easyadventure.setup_review_size"), Component.literal(parseValue(xEdit, 9) + " x " + formatPreviewHeight(parseValue(yEdit, 5), parseValue(downYEdit, 0)) + " x " + parseValue(zEdit, 9)), leftContentX, rowY);
+                rowY = drawSetupSummaryRow(guiGraphics, Component.translatable("gui.easyadventure.setup_review_terrain"), Component.translatable(clearMode.translationKey()), leftContentX, rowY);
+                drawSetupSummaryRow(guiGraphics, Component.translatable("gui.easyadventure.setup_review_foundation"), foundationEnabled && clearMode == CoreClearMode.CLEAR ? Component.translatable(foundationMaterial.translationKey()) : Component.translatable("gui.easyadventure.none"), leftContentX, rowY);
+                drawWrapped(guiGraphics, Component.translatable("gui.easyadventure.setup_review_warning"), leftContentX, cardTop + 116, 136, COLOR_WARN);
+                drawWrapped(guiGraphics, Component.translatable("gui.easyadventure.setup_review_report_hint"), rightContentX, cardTop + 44, 138, COLOR_MUTED);
+            }
+        }
     }
 
     private void renderResidentsPage(GuiGraphics guiGraphics) {
@@ -388,16 +474,35 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
         boolean generalPage = currentPage == Page.GENERAL;
         boolean residentsPage = currentPage == Page.RESIDENTS;
         boolean upgradesPage = currentPage == Page.UPGRADES;
+        boolean initialSetup = isInitialSetup();
+        boolean canChooseTerrain = initialSetup && managerAccess;
+        boolean foundationMode = canChooseTerrain && clearMode == CoreClearMode.CLEAR && foundationEnabled;
+        boolean setupNameStep = initialSetup && setupStep == SetupStep.NAME;
+        boolean setupSizeStep = initialSetup && setupStep == SetupStep.SIZE;
+        boolean setupTerrainStep = initialSetup && setupStep == SetupStep.TERRAIN;
+        boolean setupReviewStep = initialSetup && setupStep == SetupStep.REVIEW;
 
-        setWidgetState(xEdit, generalPage, !menu.isSizeLocked());
-        setWidgetState(yEdit, generalPage, !menu.isSizeLocked());
-        setWidgetState(downYEdit, generalPage, !menu.isSizeLocked());
-        setWidgetState(zEdit, generalPage, !menu.isSizeLocked());
-        setWidgetState(baseNameEdit, generalPage, true);
-        setWidgetState(clearModeButton, generalPage, true);
-        setWidgetState(passwordToggleButton, generalPage, true);
-        setWidgetState(passwordEdit, generalPage, true);
-        setWidgetState(applyButton, generalPage, true);
+        layoutGeneralWidgets(initialSetup);
+        refreshClearModeLabel();
+        refreshFoundationLabel();
+        refreshFoundationMaterialLabel();
+        refreshApplyButtonLabel();
+
+        boolean sizeEditable = initialSetup && !menu.isSizeLocked() && managerAccess;
+        setWidgetState(xEdit, generalPage && (!initialSetup || setupSizeStep), sizeEditable);
+        setWidgetState(yEdit, generalPage && (!initialSetup || setupSizeStep), sizeEditable);
+        setWidgetState(downYEdit, generalPage && (!initialSetup || setupSizeStep), sizeEditable);
+        setWidgetState(zEdit, generalPage && (!initialSetup || setupSizeStep), sizeEditable);
+        setWidgetState(baseNameEdit, generalPage && (!initialSetup || setupNameStep), managerAccess);
+        setWidgetState(clearModeButton, generalPage && (!initialSetup || setupTerrainStep), canChooseTerrain);
+        setWidgetState(foundationToggleButton, generalPage && (!initialSetup || setupTerrainStep) && canChooseTerrain && clearMode == CoreClearMode.CLEAR, managerAccess);
+        setWidgetState(foundationMaterialButton, generalPage && (!initialSetup || setupTerrainStep) && foundationMode, managerAccess);
+        setWidgetState(passwordToggleButton, generalPage && !initialSetup, managerAccess);
+        setWidgetState(passwordEdit, generalPage && !initialSetup, managerAccess && passwordEnabled);
+        refreshPasswordEditState();
+        setWidgetState(setupBackButton, generalPage && initialSetup && setupStep != SetupStep.NAME, managerAccess);
+        setWidgetState(preflightButton, generalPage && initialSetup && setupReviewStep, managerAccess);
+        setWidgetState(applyButton, generalPage, managerAccess);
 
         setWidgetState(residentPickerButton, residentsPage, true);
         setWidgetState(residentCandidatePreviousButton, residentsPage, hasResidentCandidates());
@@ -421,11 +526,7 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
         pageUpgradesButton.active = managerAccess && !upgradesPage;
         menu.setUpgradeSlotsVisible(upgradesPage);
 
-        if (generalPage) {
-            setFocused(xEdit);
-        } else {
-            setFocused(null);
-        }
+        setFocused(generalPage && (!initialSetup || setupNameStep) ? baseNameEdit : null);
     }
 
     private void refreshDynamicState() {
@@ -646,19 +747,85 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
         guiGraphics.fill(centerX - 2, centerY, centerX + 3, centerY + 1, color);
     }
 
+    private void drawSetupProgress(GuiGraphics guiGraphics, int x, int y) {
+        for (SetupStep step : SetupStep.values()) {
+            int nodeX = x + step.index * 32;
+            boolean active = setupStep == step;
+            boolean completed = setupStep.index > step.index;
+            int color = active ? COLOR_ACCENT : completed ? COLOR_OK : COLOR_BORDER;
+            if (step.index < SetupStep.values().length - 1) {
+                guiGraphics.fill(nodeX + 18, y + 8, nodeX + 31, y + 10, completed ? COLOR_OK : COLOR_BORDER);
+            }
+            guiGraphics.renderOutline(nodeX, y, 18, 18, color);
+            guiGraphics.fill(nodeX + 2, y + 2, nodeX + 16, y + 16, 0xFF11161D);
+            guiGraphics.drawString(this.font, Integer.toString(step.index + 1), nodeX + 6, y + 5, color, false);
+        }
+    }
+
+    private int drawSetupSummaryRow(GuiGraphics guiGraphics, Component label, Component value, int x, int y) {
+        drawTrimmed(guiGraphics, label, x, y, 58, COLOR_SOFT);
+        drawTrimmed(guiGraphics, value, x + 58, y, 76, COLOR_TEXT);
+        return y + 18;
+    }
+
     private void setWidgetState(AbstractWidget widget, boolean visible, boolean active) {
         widget.visible = visible;
         widget.active = visible && active;
     }
 
+    private void layoutGeneralWidgets(boolean initialSetup) {
+        int left = screenLeft();
+        int top = screenTop();
+        baseNameEdit.setX(left + 220);
+        baseNameEdit.setY(top + (initialSetup ? 104 : 76));
+        clearModeButton.setX(left + 220);
+        clearModeButton.setY(top + (initialSetup ? 82 : 102));
+        foundationToggleButton.setX(left + 220);
+        foundationToggleButton.setY(top + (initialSetup ? 108 : 128));
+        foundationMaterialButton.setX(left + 220);
+        foundationMaterialButton.setY(top + (initialSetup ? 134 : 154));
+        passwordToggleButton.setX(left + 220);
+        passwordToggleButton.setY(top + 128);
+        passwordEdit.setX(left + 220);
+        passwordEdit.setY(top + 154);
+        setupBackButton.setX(left + 220);
+        setupBackButton.setY(top + 176);
+        preflightButton.setX(left + 220);
+        preflightButton.setY(top + (initialSetup ? 122 : 126));
+        applyButton.setX(left + (initialSetup ? 300 : 300));
+        applyButton.setY(top + 176);
+    }
+
+    private void toggleFoundation() {
+        if (!isInitialSetup() || clearMode != CoreClearMode.CLEAR) {
+            return;
+        }
+        foundationEnabled = !foundationEnabled;
+        refreshFoundationLabel();
+        updatePageState();
+    }
+
+    private void cycleFoundationMaterial() {
+        if (!isInitialSetup() || clearMode != CoreClearMode.CLEAR || !foundationEnabled) {
+            return;
+        }
+        foundationMaterial = foundationMaterial.next();
+        refreshFoundationMaterialLabel();
+    }
+
     private void togglePassword() {
         passwordEnabled = !passwordEnabled;
         refreshToggleLabel();
+        refreshPasswordEditState();
     }
 
     private void toggleClearMode() {
+        if (!isInitialSetup()) {
+            return;
+        }
         clearMode = clearMode.next();
         refreshClearModeLabel();
+        updatePageState();
     }
 
     private void refreshToggleLabel() {
@@ -667,11 +834,54 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
         ));
     }
 
+    private void refreshFoundationLabel() {
+        foundationToggleButton.setMessage(Component.translatable(
+                foundationEnabled ? "button.easyadventure.foundation_on" : "button.easyadventure.foundation_off"
+        ));
+    }
+
+    private void refreshFoundationMaterialLabel() {
+        foundationMaterialButton.setMessage(Component.translatable("button.easyadventure.foundation_material", Component.translatable(foundationMaterial.translationKey())));
+    }
+
+    private void refreshPasswordEditState() {
+        if (passwordEdit == null) {
+            return;
+        }
+        boolean editable = currentPage == Page.GENERAL && !isInitialSetup() && hasManagerAccess() && passwordEnabled;
+        passwordEdit.setEditable(editable);
+        passwordEdit.setTextColor(editable ? 0xFFFFFF : 0x8E8E8E);
+        passwordEdit.active = passwordEdit.visible && editable;
+        if (!editable && passwordEdit.isFocused()) {
+            passwordEdit.setFocused(false);
+        }
+    }
+
     private void refreshClearModeLabel() {
-        clearModeButton.setMessage(Component.translatable(clearMode.translationKey()));
+        Component modeName = Component.translatable(clearMode.translationKey());
+        clearModeButton.setMessage(Component.translatable(
+                isInitialSetup() ? "button.easyadventure.terrain_mode" : "button.easyadventure.terrain_mode_locked",
+                modeName
+        ));
+    }
+
+    private void refreshApplyButtonLabel() {
+        if (applyButton == null) {
+            return;
+        }
+        if (!isInitialSetup()) {
+            applyButton.setMessage(Component.translatable("button.easyadventure.apply"));
+            return;
+        }
+        applyButton.setMessage(Component.translatable(setupStep == SetupStep.REVIEW ? "button.easyadventure.create_base" : "button.easyadventure.next"));
     }
 
     private void save() {
+        if (isInitialSetup() && setupStep != SetupStep.REVIEW) {
+            nextSetupStep();
+            return;
+        }
+
         int newX = clamp(parseValue(xEdit, 9), BaseCoreBlockEntity.MIN_SIZE_XZ, BaseCoreBlockEntity.MAX_SIZE_XZ);
         int newY = clamp(parseValue(yEdit, 5), BaseCoreBlockEntity.MIN_SIZE_Y, BaseCoreBlockEntity.MAX_SIZE_Y);
         int newBelowY = clamp(parseValue(downYEdit, 0), BaseCoreBlockEntity.MIN_SIZE_BELOW_Y, BaseCoreBlockEntity.MAX_SIZE_BELOW_Y);
@@ -684,10 +894,32 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
                 newZ,
                 baseNameEdit.getValue(),
                 clearMode,
+                foundationEnabled,
+                foundationMaterial,
                 passwordEnabled,
                 passwordEdit.getValue()
         ));
         onClose();
+    }
+
+    private void nextSetupStep() {
+        setupStep = setupStep.next();
+        updatePageState();
+    }
+
+    private void previousSetupStep() {
+        setupStep = setupStep.previous();
+        updatePageState();
+    }
+
+    private void requestSafetyReport() {
+        EasyAdventureNetwork.sendToServer(new PreviewCorePayload(
+                menu.getPos(),
+                clamp(parseValue(xEdit, 9), BaseCoreBlockEntity.MIN_SIZE_XZ, BaseCoreBlockEntity.MAX_SIZE_XZ),
+                clamp(parseValue(yEdit, 5), BaseCoreBlockEntity.MIN_SIZE_Y, BaseCoreBlockEntity.MAX_SIZE_Y),
+                clamp(parseValue(downYEdit, 0), BaseCoreBlockEntity.MIN_SIZE_BELOW_Y, BaseCoreBlockEntity.MAX_SIZE_BELOW_Y),
+                clamp(parseValue(zEdit, 9), BaseCoreBlockEntity.MIN_SIZE_XZ, BaseCoreBlockEntity.MAX_SIZE_XZ)
+        ));
     }
 
     private void addResident() {
@@ -851,6 +1083,14 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
         guiGraphics.drawString(this.font, Component.literal(trimText(component.getString(), maxWidth)), x, y, color);
     }
 
+    private void drawWrapped(GuiGraphics guiGraphics, Component component, int x, int y, int maxWidth, int color) {
+        int lineY = y;
+        for (FormattedCharSequence line : this.font.split(component, maxWidth)) {
+            guiGraphics.drawString(this.font, line, x, lineY, color);
+            lineY += 10;
+        }
+    }
+
     private String trimText(String text, int maxWidth) {
         if (text == null || text.isEmpty() || this.font.width(text) <= maxWidth) {
             return text == null ? "" : text;
@@ -876,6 +1116,10 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
 
     private static int clamp(int value, int min, int max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    private static String formatPreviewHeight(int upwardY, int belowY) {
+        return belowY > 0 ? upwardY + " + " + belowY : Integer.toString(upwardY);
     }
 
     private boolean isEditingText() {
@@ -906,6 +1150,15 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
         return minecraft.level.getBlockEntity(menu.getPos()) instanceof BaseCoreBlockEntity core ? core : null;
     }
 
+    private boolean isInitialSetup() {
+        BaseCoreBlockEntity core = currentCore();
+        return isInitialSetup(core);
+    }
+
+    private boolean isInitialSetup(@Nullable BaseCoreBlockEntity core) {
+        return core != null && !menu.isSizeLocked() && !core.isTerritoryActive();
+    }
+
     private boolean hasManagerAccess() {
         return minecraft != null
                 && minecraft.player != null
@@ -933,6 +1186,31 @@ public class CoreSizeScreen extends AbstractContainerScreen<CoreSizeMenu> {
 
         private Component title() {
             return Component.translatable(titleKey);
+        }
+    }
+
+    private enum SetupStep {
+        NAME(0, "gui.easyadventure.setup_step_name"),
+        SIZE(1, "gui.easyadventure.setup_step_size"),
+        TERRAIN(2, "gui.easyadventure.setup_step_terrain"),
+        REVIEW(3, "gui.easyadventure.setup_step_review");
+
+        private final int index;
+        private final String titleKey;
+
+        SetupStep(int index, String titleKey) {
+            this.index = index;
+            this.titleKey = titleKey;
+        }
+
+        private SetupStep next() {
+            SetupStep[] values = values();
+            return values[Math.min(values.length - 1, ordinal() + 1)];
+        }
+
+        private SetupStep previous() {
+            SetupStep[] values = values();
+            return values[Math.max(0, ordinal() - 1)];
         }
     }
 

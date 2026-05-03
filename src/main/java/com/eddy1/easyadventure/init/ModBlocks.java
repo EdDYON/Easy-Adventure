@@ -2,6 +2,7 @@ package com.eddy1.easyadventure.init;
 
 import com.eddy1.easyadventure.EasyAdventure;
 import com.eddy1.easyadventure.block.BaseCoreBlock;
+import com.eddy1.easyadventure.block.BoundaryMarkerBlock;
 import com.eddy1.easyadventure.block.KeyRecallTableBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockBehaviour;
@@ -20,6 +21,11 @@ public final class ModBlocks {
     public static final RegistryObject<KeyRecallTableBlock> KEY_RECALL_TABLE = BLOCKS.register(
             "key_recall_table",
             () -> new KeyRecallTableBlock(BlockBehaviour.Properties.of().strength(2.5F, 6.0F).noOcclusion())
+    );
+
+    public static final RegistryObject<BoundaryMarkerBlock> BOUNDARY_MARKER = BLOCKS.register(
+            "boundary_marker",
+            () -> new BoundaryMarkerBlock(BlockBehaviour.Properties.of().strength(1.0F, 3.0F).noOcclusion())
     );
 
     private ModBlocks() {

@@ -21,26 +21,7 @@
     }
   },
   "result": {
-    "id": "easyadventure:base_core",
-    "count": 1
-  },
-  "criteria": {
-    "has_paper": {
-      "trigger": "minecraft:inventory_changed",
-      "conditions": {
-        "items": [
-          {
-            "items": [
-              "minecraft:paper"
-            ]
-          }
-        ]
-      }
-    }
-  },
-  "requirements": [
-    [
-      "has_paper"
-    ]
-  ]
+    "count": 1,
+    "item": "easyadventure:base_core"
+  }
 }

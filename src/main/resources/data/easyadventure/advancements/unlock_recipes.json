@@ -14,7 +14,10 @@
       "easyadventure:blank_base_scroll",
       "easyadventure:base_key",
       "easyadventure:base_core",
-      "easyadventure:key_recall_table"
+      "easyadventure:key_recall_table",
+      "easyadventure:preflight_scroll",
+      "easyadventure:boundary_marker",
+      "easyadventure:base_archive_book"
     ]
   },
   "requirements": [
