@@ -1,0 +1,31 @@
+# 模组加载器配置
+modLoader="javafml"
+loaderVersion="[4,)"
+license="All rights reserved © eddy1"
+
+# 模组主信息块
+[[mods]]
+modId="easyadventure"
+version="1.4.1"
+displayName="Easy Adventure"
+authors="eddy1"
+logoFile = "logo.png"
+
+description='''
+背起你的家去旅行！这是一个轻量级的空间压缩模组，
+支持 1.21.1 版本的建筑打包与释放。
+    '''
+
+[[dependencies.easyadventure]]
+modId="neoforge"
+type="required"
+versionRange="[21,)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.easyadventure]]
+modId="minecraft"
+type="required"
+versionRange="[1.21, 1.22)"
+ordering="NONE"
+side="BOTH"

@@ -1,0 +1,14 @@
+{
+  "parent": "item/generated",
+  "textures": {
+    "layer0": "easyadventure:item/base_key"
+  },
+  "overrides": [
+    {
+      "predicate": {
+        "easyadventure:has_data": 1
+      },
+      "model": "easyadventure:item/base_key_full"
+    }
+  ]
+}
