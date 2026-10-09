@@ -1,0 +1,49 @@
+plugins {
+    id 'net.neoforged.moddev' version '1.0.21'
+}
+
+group = 'com.eddy1.easyadventure'
+version = '1.5.0'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+neoForge {
+    version = '21.1.1'
+
+    mods {
+        easyadventure {
+            sourceSet sourceSets.main
+        }
+    }
+
+    runs {
+        configureEach {
+            systemProperty 'forge.logging.markers', 'REGISTRIES'
+            systemProperty 'forge.logging.console.level', 'debug'
+        }
+
+        client {
+            client()
+            jvmArguments.addAll '-Xms1G', '-Xmx4G'
+            programArguments.addAll '--username', 'DevUser'
+        }
+
+        server {
+            server()
+            programArgument '--nogui'
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+    maven { url = 'https://maven.neoforged.net/releases' }
+    maven { url = 'https://mirrors.aliyun.com/maven/' }
+}
+
+dependencies {
+}
