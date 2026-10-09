@@ -1,0 +1,13 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [
+    {
+      "item": "easyadventure:blank_base_scroll"
+    }
+  ],
+  "result": {
+    "item": "easyadventure:base_key",
+    "count": 1
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "replace": false,
+  "values": [
+    "minecraft:light",
+    { "id": "immersive_lanterns:dynamic_light", "required": false },
+    { "id": "immersive_lanterns:fake_light", "required": false },
+    { "id": "immersive_lanterns:lantern_light", "required": false },
+    { "id": "dynamiclightsreforged:lit_air", "required": false }
+  ]
+}

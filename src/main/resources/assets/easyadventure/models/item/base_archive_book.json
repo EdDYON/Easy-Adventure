@@ -1,0 +1,6 @@
+{
+  "parent": "item/generated",
+  "textures": {
+    "layer0": "easyadventure:item/base_key_full"
+  }
+}

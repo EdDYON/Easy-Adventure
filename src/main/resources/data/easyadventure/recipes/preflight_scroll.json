@@ -1,0 +1,16 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "category": "misc",
+  "ingredients": [
+    {
+      "item": "easyadventure:blank_base_scroll"
+    },
+    {
+      "item": "minecraft:compass"
+    }
+  ],
+  "result": {
+    "count": 1,
+    "item": "easyadventure:preflight_scroll"
+  }
+}
